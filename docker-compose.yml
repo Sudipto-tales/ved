@@ -1,0 +1,134 @@
+# VED — local development stack.
+# Infra services (postgres, redis, nats, minio) have NO profile → they always start.
+# App services (controlplane, node, web) are under the "app" profile → started only
+# when their code/Dockerfiles exist. Drive this file with ./ved.sh (see docs/commands.md).
+
+name: ved
+
+services:
+  # ---------- Infrastructure (runs today, no app code required) ----------
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ved}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ved}
+      POSTGRES_DB: ${POSTGRES_DB:-ved}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ved} -d ${POSTGRES_DB:-ved}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  nats:
+    image: nats:2.10-alpine
+    restart: unless-stopped
+    command: ["-js", "-sd", "/data", "-m", "8222"]   # JetStream + monitoring endpoint
+    ports:
+      - "${NATS_PORT:-4222}:4222"
+      - "${NATS_MONITOR_PORT:-8222}:8222"
+    volumes:
+      - natsdata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-ved}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-ved-secret}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------- Application (profile: app — needs ./server and ./web to exist) ----------
+  controlplane:
+    profiles: ["app"]
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: controlplane
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ved}:${POSTGRES_PASSWORD:-ved}@postgres:5432/${POSTGRES_DB:-ved}?sslmode=disable
+      NATS_URL: nats://nats:4222
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio:9000
+    ports:
+      - "${CONTROLPLANE_PORT:-8080}:8080"
+    depends_on:
+      postgres: { condition: service_healthy }
+      nats: { condition: service_healthy }
+      minio: { condition: service_healthy }
+
+  node:
+    profiles: ["app"]
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      target: node
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-ved}:${POSTGRES_PASSWORD:-ved}@postgres:5432/${POSTGRES_DB:-ved}?sslmode=disable
+      NATS_URL: nats://nats:4222
+      REDIS_URL: redis://redis:6379
+      MINIO_ENDPOINT: minio:9000
+      JWT_SECRET: ${JWT_SECRET:-dev-insecure-secret-change-me}
+      DEV_SEED: ${DEV_SEED:-true}
+    ports:
+      - "${NODE_PORT:-8081}:8081"
+    depends_on:
+      postgres: { condition: service_healthy }
+      nats: { condition: service_healthy }
+      minio: { condition: service_healthy }
+
+  web:
+    profiles: ["app"]
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: http://localhost:${NODE_PORT:-8081}
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    depends_on:
+      - node
+
+volumes:
+  pgdata:
+  redisdata:
+  natsdata:
+  miniodata:

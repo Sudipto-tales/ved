@@ -1,0 +1,115 @@
+import type { PageDef } from '@/shared/types/page';
+
+export const studentsPages: PageDef[] = [
+  // --- ADMIN / STAFF: People → Students management ---
+  {
+    path: 'students',
+    title: 'Students',
+    persona: 'ADMIN',
+    permission: 'student.read',
+    tier: 'T1',
+    status: 'planned',
+    nav: true,
+  },
+  {
+    path: 'students/:id',
+    title: 'Student detail',
+    persona: 'ADMIN',
+    permission: 'student.read',
+    tier: 'T1',
+    status: 'planned',
+  },
+  {
+    path: 'students/onboard',
+    title: 'Onboard student',
+    persona: 'ADMIN',
+    permission: 'student.onboard',
+    tier: 'T1',
+    status: 'planned',
+  },
+  {
+    path: 'students/import',
+    title: 'Bulk import students',
+    persona: 'ADMIN',
+    permission: 'student.create',
+    tier: 'T1',
+    status: 'planned',
+  },
+
+  // --- ADMIN / STAFF: Guardian record management ---
+  {
+    path: 'guardians',
+    title: 'Guardians',
+    persona: 'ADMIN',
+    permission: 'student.read',
+    tier: 'T1',
+    status: 'planned',
+    nav: true,
+  },
+  {
+    path: 'guardians/:id',
+    title: 'Guardian detail',
+    persona: 'ADMIN',
+    permission: 'student.update',
+    tier: 'T1',
+    status: 'planned',
+  },
+
+  // --- STUDENT: self-service portal (identity-scoped, no permission gate) ---
+  {
+    path: 'portal/student',
+    title: 'Dashboard',
+    persona: 'STUDENT',
+    tier: 'T1',
+    status: 'planned',
+    nav: true,
+  },
+  {
+    path: 'portal/student/profile',
+    title: 'My profile',
+    persona: 'STUDENT',
+    tier: 'T1',
+    status: 'planned',
+    nav: true,
+  },
+  {
+    path: 'portal/student/attendance',
+    title: 'My attendance',
+    persona: 'STUDENT',
+    tier: 'T1',
+    status: 'planned',
+    nav: true,
+  },
+  {
+    path: 'portal/student/marks',
+    title: 'My marks / report card',
+    persona: 'STUDENT',
+    tier: 'T2',
+    status: 'planned',
+    nav: true,
+  },
+  {
+    path: 'portal/student/timetable',
+    title: 'My timetable',
+    persona: 'STUDENT',
+    tier: 'T2',
+    status: 'planned',
+    nav: true,
+  },
+  {
+    path: 'portal/student/fees',
+    title: 'My fees / dues',
+    persona: 'STUDENT',
+    tier: 'T1',
+    status: 'planned',
+    nav: true,
+  },
+  {
+    path: 'portal/student/notices',
+    title: 'Notices',
+    persona: 'STUDENT',
+    tier: 'T2',
+    status: 'planned',
+    nav: true,
+  },
+];

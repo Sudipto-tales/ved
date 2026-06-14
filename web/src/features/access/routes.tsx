@@ -1,0 +1,40 @@
+import type { PageDef } from '@/shared/types/page';
+
+export const accessPages: PageDef[] = [
+  {
+    path: 'access/roles',
+    title: 'Roles & Permissions',
+    persona: 'ADMIN',
+    permission: 'role.manage',
+    tier: 'T1',
+    status: 'planned',
+    nav: true,
+  },
+  {
+    path: 'access/designations',
+    title: 'Designations',
+    persona: 'ADMIN',
+    permission: 'designation.manage',
+    tier: 'T1',
+    status: 'planned',
+    nav: true,
+  },
+  {
+    path: 'access/user-roles',
+    title: 'Assign Roles to Users',
+    persona: 'ADMIN',
+    permission: 'user.assign_roles',
+    tier: 'T1',
+    status: 'planned',
+    nav: true,
+  },
+  {
+    path: 'access/maker-checker',
+    title: 'Maker-Checker Config',
+    persona: 'ADMIN',
+    permission: 'role.manage',
+    tier: 'T2',
+    status: 'planned',
+    nav: true,
+  },
+];

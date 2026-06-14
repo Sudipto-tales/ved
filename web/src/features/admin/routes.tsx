@@ -1,0 +1,58 @@
+import type { PageDef } from '@/shared/types/page';
+
+export const adminPages: PageDef[] = [
+  {
+    path: 'admin/profile',
+    title: 'School / College Profile & Branding',
+    persona: 'ADMIN',
+    permission: 'tenant.settings',
+    tier: 'T2',
+    status: 'planned',
+    nav: true,
+  },
+  {
+    path: 'admin/academic-year',
+    title: 'Academic Year & Terms',
+    persona: 'ADMIN',
+    permission: 'tenant.settings',
+    tier: 'T2',
+    status: 'planned',
+    nav: true,
+  },
+  {
+    path: 'admin/dropdowns',
+    title: 'Dynamic Dropdowns',
+    persona: 'ADMIN',
+    permission: 'tenant.settings',
+    tier: 'T2',
+    status: 'planned',
+    nav: true,
+  },
+  {
+    path: 'admin/rooms',
+    title: 'Rooms',
+    persona: 'ADMIN',
+    permission: 'tenant.settings',
+    tier: 'T2',
+    status: 'planned',
+    nav: true,
+  },
+  {
+    path: 'admin/templates',
+    title: 'Document & Number Templates',
+    persona: 'ADMIN',
+    permission: 'tenant.settings',
+    tier: 'T2',
+    status: 'planned',
+    nav: true,
+  },
+  {
+    path: 'admin/holiday-calendar',
+    title: 'Holiday Calendar',
+    persona: 'ADMIN',
+    permission: 'tenant.settings',
+    tier: 'T2',
+    status: 'planned',
+    nav: true,
+  },
+];

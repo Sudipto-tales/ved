@@ -1,0 +1,40 @@
+# ─── Secrets & local env ─────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ─── Claude Code / agent tooling ─────────────────────────────────────
+.claude/
+
+# ─── Go (server/) ────────────────────────────────────────────────────
+/server/bin/
+/server/dist/
+*.exe
+*.test
+*.out
+coverage.out
+vendor/
+
+# ─── Node / web (web/, mobile/) ──────────────────────────────────────
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.tsbuildinfo
+.expo/
+
+# ─── Logs & temp ─────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+tmp/
+*.tmp
+
+# ─── OS / editor ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
