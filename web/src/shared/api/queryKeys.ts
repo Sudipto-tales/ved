@@ -3,4 +3,6 @@
 export const queryKeys = {
   health: ['health'] as const,
   students: ['students'] as const,
+  teachers: ['teachers'] as const,
+  staff: ['staff'] as const,
 };

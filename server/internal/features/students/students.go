@@ -28,9 +28,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weloin/ved/internal/platform/authz"
-	"github.com/weloin/ved/internal/platform/credential"
-	"github.com/weloin/ved/internal/platform/crypto"
 	"github.com/weloin/ved/internal/platform/httpx"
+	"github.com/weloin/ved/internal/platform/onboarding"
 )
 
 // ---- Wire shapes (the OpenAPI contract) -----------------------------------------
@@ -101,10 +100,8 @@ type StudentDetail struct {
 
 var (
 	ErrNotFound     = errors.New("not found")
-	ErrNoTenantSlug = errors.New("tenant has no slug configured")
 	ErrDuplicateAdm = errors.New("admission number already exists")
 	ErrInvalidInput = errors.New("invalid input")
-	ErrForeignRole  = errors.New("role not found in this tenant")
 )
 
 // ---- Repository ------------------------------------------------------------------
@@ -133,9 +130,14 @@ func (r *Repo) withTenant(ctx context.Context, tenantID uuid.UUID, fn func(pgx.T
 
 // ---- Service ---------------------------------------------------------------------
 
-type Service struct{ repo *Repo }
+type Service struct {
+	repo   *Repo
+	engine *onboarding.Engine
+}
 
-func NewService(repo *Repo) *Service { return &Service{repo: repo} }
+func NewService(repo *Repo, engine *onboarding.Engine) *Service {
+	return &Service{repo: repo, engine: engine}
+}
 
 // Onboard runs the whole admission in one transaction (flow A). Returns the generated
 // login + one-time temp password.
@@ -144,95 +146,38 @@ func (s *Service) Onboard(ctx context.Context, tenantID, actor uuid.UUID, in Onb
 		return OnboardResult{}, fmt.Errorf("%w: name and admission_no are required", ErrInvalidInput)
 	}
 	var res OnboardResult
-	err := s.repo.withTenant(ctx, tenantID, func(tx pgx.Tx) error {
-		// 1. School slug → drives the login handle (docs/06).
-		var slug string
-		err := tx.QueryRow(ctx, `SELECT slug FROM tenant_profile WHERE deleted_at IS NULL`).Scan(&slug)
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ErrNoTenantSlug
-		}
+	err := s.engine.WithTenant(ctx, tenantID, func(tx pgx.Tx) error {
+		slug, err := onboarding.SchoolSlug(ctx, tx)
 		if err != nil {
 			return err
 		}
+		hlc := onboarding.NowHLC()
 
-		// 2. Generate a globally-unique login handle (users has no RLS → global check).
-		handle, err := credential.GenerateHandle(in.Name, "STUDENT", slug, func(candidate string) (bool, error) {
-			var exists bool
-			if err := tx.QueryRow(ctx,
-				`SELECT EXISTS(SELECT 1 FROM users WHERE lower(login_identifier) = lower($1))`,
-				candidate).Scan(&exists); err != nil {
-				return false, err
-			}
-			return exists, nil
+		// Shared identity machinery: login handle + temp password + user + membership + roles.
+		member, err := s.engine.CreateMember(ctx, tx, onboarding.MemberInput{
+			TenantID: tenantID, Actor: actor, Name: in.Name, UserType: "STUDENT",
+			SchoolSlug: slug, RoleIDs: in.RoleIDs, HLC: hlc,
 		})
 		if err != nil {
 			return err
 		}
-
-		// 3. Temp password (forced reset on first login).
-		tempPW, err := credential.TempPassword()
-		if err != nil {
-			return err
-		}
-		hash, err := crypto.HashPassword(tempPW)
-		if err != nil {
-			return err
-		}
-
-		userID := uuid.Must(uuid.NewV7())
-		membershipID := uuid.Must(uuid.NewV7())
 		studentID := uuid.Must(uuid.NewV7())
-		hlc := nowHLC()
 
-		// 4. Global identity.
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO users (id, login_identifier, password_hash, must_reset_password, status, hlc, version, origin_node_id)
-			 VALUES ($1, $2, $3, true, 'ACTIVE', $4, 1, $5)`,
-			userID, handle, hash, hlc, s.repo.nodeID); err != nil {
-			return fmt.Errorf("insert user: %w", err)
-		}
-
-		// 5. Tenant membership (STUDENT).
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO memberships (id, tenant_id, user_id, user_type, status, created_by, hlc, version, origin_node_id)
-			 VALUES ($1, $2, $3, 'STUDENT', 'ACTIVE', $4, $5, 1, $6)`,
-			membershipID, tenantID, userID, nilUUID(actor), hlc, s.repo.nodeID); err != nil {
-			return fmt.Errorf("insert membership: %w", err)
-		}
-
-		// 6. Optional roles (validated against this tenant via RLS-scoped select).
-		for _, rid := range in.RoleIDs {
-			var ok bool
-			err := tx.QueryRow(ctx, `SELECT true FROM roles WHERE id = $1 AND deleted_at IS NULL`, rid).Scan(&ok)
-			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("%w: %s", ErrForeignRole, rid)
-			}
-			if err != nil {
-				return err
-			}
-			if _, err := tx.Exec(ctx,
-				`INSERT INTO membership_roles (tenant_id, membership_id, role_id, created_by, hlc, origin_node_id)
-				 VALUES ($1, $2, $3, $4, $5, $6)`,
-				tenantID, membershipID, rid, nilUUID(actor), hlc, s.repo.nodeID); err != nil {
-				return fmt.Errorf("insert membership role: %w", err)
-			}
-		}
-
-		// 7. Student profile.
+		// Student-specific profile.
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO student (id, tenant_id, membership_id, admission_no, dob, gender, category,
 			                      blood_group, address, prior_school, prior_class, created_by, hlc, version, origin_node_id)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, 1, $14)`,
-			studentID, tenantID, membershipID, in.AdmissionNo, nullDate(in.DOB), nullStr(in.Gender),
+			studentID, tenantID, member.MembershipID, in.AdmissionNo, nullDate(in.DOB), nullStr(in.Gender),
 			nullStr(in.Category), nullStr(in.BloodGroup), nullJSON(in.Address), nullStr(in.PriorSchool),
-			nullStr(in.PriorClass), nilUUID(actor), hlc, s.repo.nodeID); err != nil {
+			nullStr(in.PriorClass), nilUUID(actor), hlc, s.engine.NodeID()); err != nil {
 			if isUniqueViolation(err) {
 				return ErrDuplicateAdm
 			}
 			return fmt.Errorf("insert student: %w", err)
 		}
 
-		// 8. Guardians (contact-only records) + the scoping link.
+		// Guardians (contact-only records) + the scoping link.
 		guardians := make([]map[string]any, 0, len(in.Guardians))
 		for _, g := range in.Guardians {
 			if g.Name == "" || g.Phone == "" || g.Relation == "" {
@@ -242,39 +187,30 @@ func (s *Service) Onboard(ctx context.Context, tenantID, actor uuid.UUID, in Onb
 			if _, err := tx.Exec(ctx,
 				`INSERT INTO guardian (id, tenant_id, name, relation_default, phone, email, created_by, hlc, version, origin_node_id)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 1, $9)`,
-				gid, tenantID, g.Name, g.Relation, g.Phone, nullStr(g.Email), nilUUID(actor), hlc, s.repo.nodeID); err != nil {
+				gid, tenantID, g.Name, g.Relation, g.Phone, nullStr(g.Email), nilUUID(actor), hlc, s.engine.NodeID()); err != nil {
 				return fmt.Errorf("insert guardian: %w", err)
 			}
 			if _, err := tx.Exec(ctx,
 				`INSERT INTO guardian_student (id, tenant_id, guardian_id, student_id, relation, is_primary, can_pay, created_by, hlc, version, origin_node_id)
 				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, $10)`,
-				uuid.Must(uuid.NewV7()), tenantID, gid, studentID, g.Relation, g.IsPrimary, g.CanPay, nilUUID(actor), hlc, s.repo.nodeID); err != nil {
+				uuid.Must(uuid.NewV7()), tenantID, gid, studentID, g.Relation, g.IsPrimary, g.CanPay, nilUUID(actor), hlc, s.engine.NodeID()); err != nil {
 				return fmt.Errorf("insert guardian_student: %w", err)
 			}
 			guardians = append(guardians, map[string]any{"id": gid, "name": g.Name, "relation": g.Relation})
 		}
 
-		// 9 + 10. ONE domain event for the aggregate (flow A) + audit, in the same tx.
+		// ONE domain event for the aggregate (flow A) + audit, in the same tx.
 		payload, _ := json.Marshal(map[string]any{
-			"student_id": studentID, "membership_id": membershipID, "user_id": userID,
-			"login_identifier": handle, "admission_no": in.AdmissionNo, "guardians": guardians,
+			"student_id": studentID, "membership_id": member.MembershipID, "user_id": member.UserID,
+			"login_identifier": member.Login, "admission_no": in.AdmissionNo, "guardians": guardians,
 		})
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO outbox (id, tenant_id, aggregate, aggregate_id, op, payload, hlc, origin_node_id)
-			 VALUES ($1, $2, 'student', $3, 'CREATE', $4, $5, $6)`,
-			uuid.Must(uuid.NewV7()), tenantID, studentID, payload, hlc, s.repo.nodeID); err != nil {
-			return fmt.Errorf("insert outbox: %w", err)
-		}
-		if _, err := tx.Exec(ctx,
-			`INSERT INTO audit_log (id, tenant_id, actor_membership_id, action, resource_type, resource_id, after, origin_node_id)
-			 VALUES ($1, $2, $3, 'student.enrolled', 'student', $4, $5, $6)`,
-			uuid.Must(uuid.NewV7()), tenantID, nilUUID(actor), studentID, payload, s.repo.nodeID); err != nil {
-			return fmt.Errorf("insert audit: %w", err)
+		if err := s.engine.WriteEventAndAudit(ctx, tx, tenantID, "student", studentID, "student.enrolled", actor, payload, hlc); err != nil {
+			return err
 		}
 
 		res = OnboardResult{
-			StudentID: studentID, MembershipID: membershipID,
-			LoginIdentifier: handle, TempPassword: tempPW, AdmissionNo: in.AdmissionNo,
+			StudentID: studentID, MembershipID: member.MembershipID,
+			LoginIdentifier: member.Login, TempPassword: member.TempPassword, AdmissionNo: in.AdmissionNo,
 		}
 		return nil
 	})
@@ -366,7 +302,7 @@ func (s *Service) Get(ctx context.Context, tenantID, studentID uuid.UUID) (Stude
 // Register mounts the students endpoints on an auth + tenant-scoped group; each route
 // declares its permission (docs/05).
 func Register(r chi.Router, pool *pgxpool.Pool, nodeID uuid.UUID, res *authz.Resolver) {
-	svc := NewService(NewRepo(pool, nodeID))
+	svc := NewService(NewRepo(pool, nodeID), onboarding.NewEngine(pool, nodeID))
 
 	r.With(authz.Require(res, "student.onboard")).Post("/api/v1/students/onboard",
 		func(w http.ResponseWriter, req *http.Request) {
@@ -431,9 +367,9 @@ func writeErr(w http.ResponseWriter, err error) {
 		httpx.Error(w, http.StatusNotFound, "not found")
 	case errors.Is(err, ErrDuplicateAdm):
 		httpx.Error(w, http.StatusConflict, "admission number already exists")
-	case errors.Is(err, ErrInvalidInput), errors.Is(err, ErrForeignRole):
+	case errors.Is(err, ErrInvalidInput), errors.Is(err, onboarding.ErrForeignRole):
 		httpx.Error(w, http.StatusBadRequest, err.Error())
-	case errors.Is(err, ErrNoTenantSlug):
+	case errors.Is(err, onboarding.ErrNoTenantSlug):
 		httpx.Error(w, http.StatusFailedDependency, "tenant has no slug configured")
 	default:
 		httpx.Error(w, http.StatusInternalServerError, err.Error())

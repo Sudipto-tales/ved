@@ -5,7 +5,24 @@ The single place that records **how far the build has progressed** against the p
 
 **Legend:** ✅ done · 🟡 scaffolded / partial · ⬜ not started
 
-> **YOU ARE HERE:** M4 (Control Plane) **backend complete and verified** — the central
+> **YOU ARE HERE:** M5 (Teachers & Staff) **complete and verified** — the "bridges-first,
+> then replicate" payoff. The shared people machinery is now a kernel **onboarding engine**
+> (`internal/platform/onboarding`): handle generation + temp password + user + membership
+> + roles in one tenant tx, plus the aggregate event/audit writer. `students` was
+> **refactored** onto it (and re-verified), and `teachers` (TEACHER) + `staff` (EMPLOYEE)
+> are near-copies that only add their profile table + domain event — each is
+> onboard/roster/detail end-to-end (DB → engine → handler `requirePermission` → React).
+> Verified live: `teacher.onboard`/`staff.onboard` golden rule (1 row ⇒ 1 outbox ⇒ 1
+> audit); handles `alanturing.teacher@ved.com` / `gracehopper.employee@ved.com` (correct
+> type suffixes); membership user_type TEACHER/EMPLOYEE; duplicate employee_code 409;
+> rosters/detail 200; **students still pass post-refactor**; no-token 401; RLS on
+> `teacher` as `ved_app` (own 1, foreign 0). FE: teachers + staff roster/onboard/detail
+> screens, `tsc -b` + `vite build` clean. Next: **M5 cont.** (`academics`/`finance` —
+> append-only ledgers/marks/attendance), the platform SPA, or **M6** (sync). _DoD carried
+> forward: OpenAPI specs; automated DB-integration tests; person_document upload (MinIO);
+> onboarding wizard/approval states._
+
+> **(prev) M4 (Control Plane) — backend complete and verified** — the central
 > cloud that registers schools and provisions tenants, a SEPARATE binary
 > (`cmd/controlplane`), SEPARATE schema (`control_plane`), and SEPARATE permission
 > namespace (`platform.*`). The full chain runs end to end: platform superadmin login →
@@ -80,7 +97,7 @@ The single place that records **how far the build has progressed** against the p
 | **M2** RBAC | permission catalog, roles, `requirePermission`, provisioning bootstrap | ✅ verified (catalog seed + default roles + real `requirePermission` + FE real perms) |
 | **M3** Onboarding + Students | credential gen, onboarding engine, first real domain slice | ✅ verified (student.onboard tx + credential gen + roster/detail; notes retired) |
 | **M4** Control Plane | registration state machine, payment-proof, licensing | ✅ backend verified (register→approve→provision→license + cross-plane handoff); platform SPA deferred |
-| **M5** Teachers/Staff/Academics/Finance | replicate the M3 shape across slices | ⬜ |
+| **M5** Teachers/Staff/Academics/Finance | replicate the M3 shape across slices | 🟡 teachers + staff ✅ verified (shared onboarding engine); academics/finance ⬜ |
 | **M6** Sync & Offline | NATS relay + inbox + HLC; wiring, not rewrite | ⬜ |
 | **M7** Guardian Portal & Mobile | child-scoped read API; Expo read-heavy | ⬜ |
 | **M8** LMS | content → assignments → submission/grading | ⬜ |
@@ -212,6 +229,28 @@ role; caught in live verification).
 MinIO payment-proof blob upload (metadata + storage_key wired); a control-plane audit log;
 OpenAPI specs; automated DB-integration tests.
 
+## Backend — `server/` (M5 Teachers & Staff) — ✅ verified
+
+The replication milestone: the shared people machinery is extracted once, then teachers
+and staff are near-copies. (academics/finance — the other M5 slices — are not yet built.)
+
+| Component | File(s) | Status |
+|---|---|---|
+| Shared onboarding engine (WithTenant, SchoolSlug, CreateMember = handle+temp pw+user+membership+roles, event/audit writer, SQL helpers) | `internal/platform/onboarding/` | ✅ |
+| `students` refactored onto the engine (DRY; re-verified) | `internal/features/students/students.go` | ✅ |
+| Migration `teacher` + `employee` profile tables (RLS + base/sync, partial-unique employee_code) | `db/migrations/00006_people_staff.sql` | ✅ applied |
+| `teachers` slice (TEACHER): onboard/roster/detail, gated teacher.* | `internal/features/teachers/teachers.go` | ✅ golden rule |
+| `staff` slice (EMPLOYEE): onboard/roster/detail, gated staff.* | `internal/features/staff/staff.go` | ✅ golden rule |
+| Node wiring (mount teachers + staff) | `cmd/node/main.go` | ✅ |
+
+**Live verification:** teacher/staff onboard 201 with golden rule (1 row ⇒ 1 outbox ⇒ 1
+audit); handles `alanturing.teacher@ved.com` / `gracehopper.employee@ved.com` (correct
+suffixes); membership user_type TEACHER/EMPLOYEE; duplicate employee_code 409; rosters +
+detail 200; **students still pass after the refactor**; no-token 401; RLS on `teacher` as
+`ved_app` (own 1, foreign 0).
+**Carried-forward:** academics + finance slices; person_document upload (MinIO); onboarding
+wizard/approval states; OpenAPI specs; DB-integration tests.
+
 ## Frontend — `web/` (M0) — 🟡 architecture scaffolded
 
 | Component | File(s) | Status |
@@ -242,8 +281,8 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
 | help | ALL | index + per-topic (`/help`, `/help/:slug`) + contextual `?` icons | ✅ |
 | notes (demo) | ADMIN | retired at M3 | — (removed) |
 | students | ADMIN/STAFF/STUDENT | roster, onboard, detail built; import/portal planned | 🟡 (roster + onboard + detail done) |
-| teachers | ADMIN/STAFF/TEACHER | mgmt + teacher portal | ⬜ |
-| staff | ADMIN/STAFF | mgmt | ⬜ |
+| teachers | ADMIN/STAFF/TEACHER | mgmt (roster/onboard/detail) done; portal planned | 🟡 (mgmt done) |
+| staff | ADMIN/STAFF | mgmt (roster/onboard/detail) | ✅ (mgmt done) |
 | onboarding | STAFF/ADMIN | wizard, approvals | ⬜ |
 | guardians | GUARDIAN | portal (multi-child, fees, …) | ⬜ |
 | academics | ADMIN | programs…timetable | ⬜ |
@@ -282,9 +321,11 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
    bootstrap + M3 tenant_profile seed for real tenants).~~ ✅ backend done & verified
    (register→approve→provision→license + cross-plane handoff). **Remaining:** the platform
    SPA (`web/platform/`) + MinIO payment-proof upload + control-plane audit log.
-8b. **M5 (replicate):** clone the M3 shape for `teachers`/`staff` (reuse the credential
-   generator + onboarding engine), then `academics`/`finance` (append-only ledgers/marks/
-   attendance). Independent tracks now the spine (M0→M3) + control plane exist.
+8b. ~~**M5 (replicate):** clone the M3 shape for `teachers`/`staff`.~~ ✅ done & verified
+   via a shared kernel **onboarding engine** (students refactored onto it too).
+9b. **Next:** `academics`/`finance` (the remaining M5 slices — append-only ledgers/marks/
+   attendance, the only design care points); the platform SPA (`web/platform/`); or **M6**
+   (sync — wiring the outbox to NATS/JetStream, since every write already routes through it).
 9. **DoD backfill:** frozen OpenAPI spec files (`/auth/*`, `/access/*`, `/students/*`) +
    automated DB integration tests (RLS isolation, golden-rule atomicity); Redis cache for
    effective permissions; document upload (MinIO) + onboarding wizard/approval states.

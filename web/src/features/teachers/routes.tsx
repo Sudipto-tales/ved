@@ -8,16 +8,9 @@ export const teachersPages: PageDef[] = [
     persona: 'ADMIN',
     permission: 'teacher.read',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
     nav: true,
-  },
-  {
-    path: 'teachers/:id',
-    title: 'Teacher detail',
-    persona: 'ADMIN',
-    permission: 'teacher.read',
-    tier: 'T1',
-    status: 'planned',
+    element: () => import('./pages/TeachersRosterPage'),
   },
   {
     path: 'teachers/onboard',
@@ -25,7 +18,17 @@ export const teachersPages: PageDef[] = [
     persona: 'ADMIN',
     permission: 'teacher.onboard',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
+    element: () => import('./pages/OnboardTeacherPage'),
+  },
+  {
+    path: 'teachers/:id',
+    title: 'Teacher detail',
+    persona: 'ADMIN',
+    permission: 'teacher.read',
+    tier: 'T1',
+    status: 'done',
+    element: () => import('./pages/TeacherDetailPage'),
   },
 
   // --- TEACHER: portal (identity-scoped, no permission gate) ---

@@ -13,7 +13,9 @@ import (
 	"github.com/weloin/ved/internal/features/access"
 	"github.com/weloin/ved/internal/features/health"
 	"github.com/weloin/ved/internal/features/identity"
+	"github.com/weloin/ved/internal/features/staff"
 	"github.com/weloin/ved/internal/features/students"
+	"github.com/weloin/ved/internal/features/teachers"
 	"github.com/weloin/ved/internal/platform/auth"
 	"github.com/weloin/ved/internal/platform/authz"
 	"github.com/weloin/ved/internal/platform/config"
@@ -95,6 +97,8 @@ func main() {
 		g.Use(httpx.TenantContext)
 		access.Register(g, pool, nodeID, resolver)
 		students.Register(g, pool, nodeID, resolver)
+		teachers.Register(g, pool, nodeID, resolver)
+		staff.Register(g, pool, nodeID, resolver)
 	})
 
 	if err := httpx.Serve(cfg.HTTPAddr, r); err != nil {
