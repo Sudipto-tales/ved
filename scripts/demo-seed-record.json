@@ -1,0 +1,10 @@
+{
+  "generated_at": "2026-06-15T08:55:40Z",
+  "students_per_school": 100,
+  "schools": [
+    { "name": "Lincoln High School", "slug": "lincoln", "login_domain": "lincoln.com",
+      "tenant_id": "019eca7d-d858-773b-9ff4-206af8408a11", "admin_login": "lauralincoln.employee@lincoln.com", "admin_temp_password": "wchgje5fDDRR" },
+    { "name": "Maple Valley College", "slug": "maple", "login_domain": "maple.com",
+      "tenant_id": "019eca7e-1b9b-7199-a8af-3fbb17f8aa71", "admin_login": "marcusmaple.employee@maple.com", "admin_temp_password": "dCGUtxJCrsnK" }
+  ]
+}

@@ -101,6 +101,10 @@ services:
     restart: unless-stopped
     env_file: [.env]
     environment:
+      # Container always listens on 8081 (the mapping's container side); the host-facing
+      # port is NODE_PORT. Pinning HTTP_ADDR keeps the listen port independent of the
+      # binary's code default, so changing that default can't break the Docker mapping.
+      HTTP_ADDR: ":8081"
       DATABASE_URL: postgres://${POSTGRES_USER:-ved}:${POSTGRES_PASSWORD:-ved}@postgres:5432/${POSTGRES_DB:-ved}?sslmode=disable
       NATS_URL: nats://nats:4222
       REDIS_URL: redis://redis:6379

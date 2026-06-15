@@ -80,6 +80,14 @@ cmd_reset() {   # DESTROY all containers AND volumes (wipes the database)
   "${DC_APP[@]}" down -v; ok "Reset complete — fresh state."
 }
 
+cmd_seed_demo() {   # seed two demo schools with full test data
+  exec "$(dirname "$0")/scripts/seed-demo.sh" "$@"
+}
+
+cmd_clean_demo() {  # remove all demo-school data in one shot
+  exec "$(dirname "$0")/scripts/clean-demo.sh" "$@"
+}
+
 cmd_help() {
   cat <<EOF
 ${c_bold}VED — Docker control${c_reset}   (docs/commands.md)
@@ -99,6 +107,10 @@ ${c_bold}VED — Docker control${c_reset}   (docs/commands.md)
     ./ved.sh reset            DESTROY containers + volumes (wipes data; confirms)
     ./ved.sh help             This help
 
+  ${c_bold}Demo / test data${c_reset}
+    ./ved.sh seed-demo        Seed 2 demo schools (Lincoln + Maple) with ~100 students each
+    ./ved.sh clean-demo       Remove ALL demo-school data in one shot (record + both tenants)
+
   Aliases: start=up, stop=down.
 EOF
 }
@@ -113,6 +125,8 @@ case "${1:-help}" in
   ps|status)        shift; cmd_ps "$@";;
   shell|sh)         shift; cmd_shell "$@";;
   psql)             shift; cmd_psql "$@";;
+  seed-demo)        shift; cmd_seed_demo "$@";;
+  clean-demo)       shift; cmd_clean_demo "$@";;
   reset|nuke)       shift; cmd_reset "$@";;
   help|-h|--help)   cmd_help;;
   *)                warn "Unknown command: $1"; echo; cmd_help; exit 1;;

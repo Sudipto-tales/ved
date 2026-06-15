@@ -165,6 +165,23 @@ The single place that records **how far the build has progressed** against the p
 
 ---
 
+## Frontend buildout (Minimal Tech) — ✅ all pages created
+
+Re-skinned the shared `shared/ui` token/kit layer to **Minimal Tech** (emerald/cyan/coral
+on a soft-gray canvas, 16px cards + faint border + soft shadow, sparklines + growth deltas
++ hero banners) — both apps inherit it. Added kit primitives (DataTable, EmptyState, Field,
+Tabs, Toolbar, Sparkline, GrowthDelta, HeroBanner, Select, StatCard spark/delta). Fixed
+persona-scoped nav/routing (`AppShell` + `PersonaHome`: EMPLOYEE→management, TEACHER/STUDENT/
+GUARDIAN→own portal). Built **every planned page** across the three apps via parallel
+feature agents: **96 tenant pages + 11 platform pages wired (0 "planned" left)** + a public
+**signup site** (landing→register→proof→status). New read endpoints over existing tables
+(academics lists, finance invoices/payments, students/guardians, access designations/profile/
+years, guardian child-marks, learning materials, platform registration/proof detail) + public
+`GET /plans`. Pages over not-yet-existing tables (fee structures, timetable, dropdowns,
+notices, …) are polished **designed scaffolds**. Both apps `tsc -b` + `vite build` clean;
+`go build`/`vet`/`gofmt` clean; new endpoints smoke-tested 200; node/controlplane/web images
+rebuilt. Roadmap (P0–P6) in [docs/22](./docs/22-frontend.md); tokens in [docs/23](./docs/23-design-system.md).
+
 ## Milestone tracker (→ [plan](./docs/plan/README.md))
 
 | Milestone | Scope | Status |
@@ -250,6 +267,7 @@ rather than relying on a superuser's `SET ROLE`.)
 | Effective-permission resolver (roles → permissions, RLS) | `internal/platform/authz/resolver.go` | ✅ |
 | `requirePermission` gate (`authz.Require`, tenant.admin short-circuit) | `internal/platform/authz/middleware.go` | ✅ + unit tests |
 | `access` slice: roles CRUD, designations, member-role assignment, `/me/permissions` | `internal/features/access/access.go` | ✅ golden rule per mutation |
+| Read-only tenant-setup GETs (`/access/profile`, `/access/academic-years`, gated `tenant.settings`) powering the admin setup screens | `internal/features/access/access.go` | ✅ read-only (full tenant-setup write slice later) |
 | Catalog seed + tenant provisioning bootstrap (default roles + attach admin) | `internal/features/access/provisioning.go` | ✅ idempotent |
 | Node wiring (seed catalog, bootstrap dev tenant, mount gated slice) | `cmd/node/main.go` | ✅ |
 
@@ -461,14 +479,14 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
 | students | ADMIN/STAFF/STUDENT | roster, onboard, detail built; import/portal planned | 🟡 (roster + onboard + detail done) |
 | teachers | ADMIN/STAFF/TEACHER | mgmt (roster/onboard/detail) done; portal planned | 🟡 (mgmt done) |
 | staff | ADMIN/STAFF | mgmt (roster/onboard/detail) | ✅ (mgmt done) |
-| onboarding | STAFF/ADMIN | wizard, approvals | ⬜ |
+| onboarding | STAFF/ADMIN | wizard hub + approvals | ✅ (hub stepper links to students/teachers/staff onboard; approvals queue scaffold) |
 | guardians | GUARDIAN | portal (dashboard + child attendance + fees done; marks/timetable/T2 planned) | 🟡 (T1 reads done) |
 | academics | ADMIN | programs…timetable | 🟡 backend done (structure + append-only attendance/marks); FE planned |
 | finance | ADMIN/STAFF | fees, ledger, audit | 🟡 backend done (append-only ledger); FE student-ledger done |
-| access | ADMIN | roles, user-roles built; designations/maker-checker planned | 🟡 (roles + user-roles done) |
-| admin | ADMIN | tenant settings | ⬜ |
-| communication | ADMIN | notices, notifications | ⬜ |
-| reports | ADMIN | dashboards, exports, backup | ⬜ |
+| access | ADMIN | roles, user-roles, designations, maker-checker | ✅ (roles + user-roles + designations WIRED; maker-checker designed scaffold) |
+| admin | ADMIN | profile, academic-year, dropdowns, rooms, templates, holiday-calendar | ✅ (profile + academic-year READ live tenant_profile/academic_year; rest polished scaffolds) |
+| communication | ADMIN | notices, notifications | ✅ (designed scaffolds, no backend) |
+| reports | ADMIN | dashboards, exports, backup-restore | ✅ (dashboards KPI StatCards/sparklines; exports + backup-restore scaffolds, backup danger zone) |
 | learning (LMS) | TEACHER/STUDENT/GUARDIAN | teacher assignments + grading done; student/guardian planned | 🟡 (teacher T3a/T3b done) |
 | platform | SUPERADMIN | login + dashboard + registrations(approve/reject) + tenants + licenses built; subscriptions/analytics/support planned | 🟡 SPA core done (separate `web/platform` build) |
 

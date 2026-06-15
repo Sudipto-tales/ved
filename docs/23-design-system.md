@@ -1,10 +1,13 @@
-# 23 — Design System (Premium SaaS Minimalism)
+# 23 — Design System (Minimal Tech)
 
-The visual language for every VED frontend surface (web, desktop, mobile). Also called
-**Semi-Flat Design**: clean and spacious, soft depth, modern rounded geometry, muted
-neutrals with strategic vibrant accents, and crisp type + thin-line icons. It is
+The visual language for every VED frontend surface (web, desktop, mobile). **Minimal
+Tech** (adapted from the MUI *Minimal* aesthetic): a flat utility on a soft-gray canvas,
+white cards with a near-invisible 1px border + a soft low-opacity shadow (elevated yet
+flat), 16px card / 8px control geometry, a geometric sans, and deeply-saturated accents
+(emerald / cyan / coral) reserved for key data, status, and graphic hero banners. It is
 implemented as design tokens + a small class-based kit in
 [`web/src/shared/ui`](../web/src/shared/ui); pages consume the kit, never raw styling.
+Both the tenant app and the platform SPA share this one token/kit layer.
 
 ## Principles
 
@@ -12,20 +15,25 @@ implemented as design tokens + a small class-based kit in
 |---|---|
 | **Clean & spacious** | Heavy negative space; borders stripped wherever a shadow or spacing can separate elements instead. Uncluttered, scannable. |
 | **Soft depth** | Cards/widgets float on **soft, diffused drop shadows** — no harsh 1px outlines around everything. |
-| **Modern geometry** | Highly **rounded corners** (12–16px on cards, 10–12px on controls; pills for badges). Friendly, Apple-esque. |
-| **Strategic color** | **Muted neutral** backgrounds (off-white `#f6f7f9`, white surfaces) to prevent eye strain; **vibrant accent** (indigo) reserved strictly for key data points and primary actions. |
-| **Crisp type & icons** | Clean sans-serif system stack; uniform **thin-line outline icons** (1.75 stroke, `currentColor`). |
+| **Modern geometry** | **16px** on cards, **8px** on controls/nav; pills for badges. |
+| **Flat yet elevated** | White cards on a soft-gray canvas, separated by a faint 1px border (`rgba(145,158,171,.16)`) + a soft halo+drop shadow — never harsh outlines. |
+| **Strategic color** | Soft-gray background (`#f4f6f8`), white surfaces; deeply-saturated accents reserved for key data, status, and hero banners. |
+| **Hero focal points** | Deep-gradient banners (midnight teal → forest) with white type + neon tags break the flat grid. |
+| **Micro-data viz** | Axis-less **sparklines** (pure color blocks) inside metric cards; growth **deltas** (arrow + colored % + muted context). |
+| **Crisp type & icons** | Geometric sans (Public Sans / Plus Jakarta / Inter); uniform **thin-line outline icons** (1.75 stroke, `currentColor`). |
 
 ## Tokens (CSS variables — `shared/ui/GlobalStyles.tsx`)
 
 ```
-Surfaces   --bg #f6f7f9 · --surface #fff · --surface-2 #fbfcfd · --border #eceef1
-Text       --text #101828 · --text-muted #667085 · --text-subtle #98a2b3
-Accent     --primary #6366f1 · --primary-hover #4f46e5 · --primary-weak #eef2ff
-Semantic   --success #16a34a · --warning #d97706 · --danger #dc2626 (+ *-weak tints)
-Radius     --radius-sm 8 · --radius 12 · --radius-lg 16 · --radius-pill 999
-Shadow     --shadow-xs / -sm / (default, diffused) / -lg     ← soft, never harsh
-Type       --font: system sans-serif (Inter / -apple-system / Segoe UI…)
+Surfaces   --bg #f4f6f8 · --surface #fff · --surface-2 #f9fafb · --border rgba(145,158,171,.16)
+Text       --text #212b36 · --text-muted #637381 · --text-subtle #919eab
+Accent     --primary #00a76f (emerald) · --primary-hover #007867 · --primary-weak/-tint (mint)
+Semantic   --info #00b8d9 (cyan) · --warning #ffab00 (amber) · --danger #ff5630 (coral) (+ *-weak)
+Radius     --radius-sm 8 · --radius 10 · --radius-lg 16 · --radius-pill 999
+Shadow     --shadow-xs/-sm/(default)/-lg = faint outline halo + soft diffused drop
+Type       --font: "Public Sans"/"Plus Jakarta Sans"/Inter/system
+Kit        Button · Card · PageHeader · StatCard (spark+delta) · Sparkline · GrowthDelta ·
+           HeroBanner · Select · Badge (neutral/primary/success/warning/info) · Spinner · Icon
 ```
 
 Accent colors are **rationed**: primary buttons, the active nav item, focus rings, and

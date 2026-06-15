@@ -177,3 +177,37 @@ The app shell + auth + tenant context + one feature (Students) form the frontend
 shared rail (router, guards, query client, generated client, UI kit). After that each
 feature folder is near-mechanical: pages + api hooks + routes against a frozen OpenAPI
 contract, so frontend and backend proceed in parallel per slice.
+
+---
+
+## Frontend build roadmap (the three apps + persona model)
+
+VED ships **three frontends** over the same kit (`shared/ui`):
+
+| App | Port | Audience | API |
+|---|---|---|---|
+| **Public signup site** | platform `:5174` (unauth routes) | prospects (PUBLIC) | control plane `:8080` `/plans`, `/register`, `/registrations/:id` |
+| **Platform SPA** | `:5174` | SUPERADMIN | `:8080/api/v1/platform/*` |
+| **Tenant app** | `:5173` | ADMIN · STAFF · TEACHER · STUDENT · GUARDIAN | node `:8091` |
+
+### Persona model (who sees what)
+Routing/visibility is **data-driven**: each `PageDef` declares a `persona` (sidebar group)
++ a `permission` (the gate). The active experience is chosen from the membership
+`user_type`: **EMPLOYEE** → management UI (ADMIN+STAFF groups, further gated by permission);
+**TEACHER/STUDENT/GUARDIAN** → only their own portal. The index (`/`) routes each persona to
+its home (`PersonaHome`). Cross-persona pages are still permission-gated.
+
+### Build order
+- **P0** — Public `GET /plans` ✅ + signup site (landing/plans → register → payment-proof → status) + MinIO proof upload.
+- **P1** — Persona-scoped nav/routing ✅ (`AppShell` + `PersonaHome`).
+- **P2** — Academics setup (programs → stages → subjects → curriculum → sections → enrollment → teaching-assignments → attendance → exams → marks → timetable).
+- **P3** — Student & Guardian portals (read-only) + Teacher portal (attendance/marks).
+- **P4** — Finance admin (fee-heads → structures → schedules → invoices → collection → concessions → fines → dues → audit-trail → cash-close).
+- **P5** — Tenant setup (profile/year/dropdowns/rooms/templates/holidays) + Comms + Reports + Onboarding wizard/approvals + Access (designations, maker-checker).
+- **P6** — Platform SPA depth (registration/proof/tenant detail, subscriptions/pricing, analytics, support) + LMS T3c.
+
+**Cross-cutting prerequisites:** public `GET /plans` ✅, MinIO blob upload (proofs/materials/submissions), the persona fix ✅, and new read endpoints over existing tables per slice.
+
+### Kit primitives (Minimal Tech)
+`Button · Card · PageHeader · StatCard(spark+delta) · Sparkline · GrowthDelta · HeroBanner ·
+Select · Badge · Spinner · Icon · DataTable · EmptyState · Field · Tabs · Toolbar`.
