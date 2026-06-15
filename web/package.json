@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "dev:platform": "vite --config platform/vite.config.ts",
+    "build:platform": "tsc -b && vite build --config platform/vite.config.ts",
+    "preview:platform": "vite preview --config platform/vite.config.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.59.0",

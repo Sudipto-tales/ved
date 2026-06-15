@@ -552,6 +552,38 @@ func RegisterPlatform(r chi.Router, svc *Service) {
 			}
 			httpx.JSON(w, http.StatusOK, map[string]any{"tenants": out})
 		})
+
+	r.With(platform.RequirePermission(platform.PermLicenseManage)).
+		Get("/api/v1/platform/licenses", func(w http.ResponseWriter, req *http.Request) {
+			rows, err := svc.pool.Query(req.Context(),
+				`SELECT l.id, t.slug, l.plan, l.seats, l.issued_at, l.expires_at, l.revoked
+				   FROM control_plane.license l JOIN control_plane.tenant t ON t.id = l.tenant_id
+				  ORDER BY l.issued_at DESC`)
+			if err != nil {
+				httpx.Error(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			defer rows.Close()
+			type ldto struct {
+				ID         uuid.UUID `json:"id"`
+				TenantSlug string    `json:"tenant_slug"`
+				Plan       string    `json:"plan"`
+				Seats      int       `json:"seats"`
+				IssuedAt   time.Time `json:"issued_at"`
+				ExpiresAt  time.Time `json:"expires_at"`
+				Revoked    bool      `json:"revoked"`
+			}
+			out := []ldto{}
+			for rows.Next() {
+				var l ldto
+				if err := rows.Scan(&l.ID, &l.TenantSlug, &l.Plan, &l.Seats, &l.IssuedAt, &l.ExpiresAt, &l.Revoked); err != nil {
+					httpx.Error(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				out = append(out, l)
+			}
+			httpx.JSON(w, http.StatusOK, map[string]any{"licenses": out})
+		})
 }
 
 // ---- helpers ---------------------------------------------------------------------

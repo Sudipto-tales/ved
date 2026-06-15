@@ -173,7 +173,7 @@ The single place that records **how far the build has progressed** against the p
 | **M1** Identity & Tenancy | real `users`/`memberships`, JWT login, tenant resolve | ✅ verified (argon2id + JWT + memberships + RLS-authorised tenant) |
 | **M2** RBAC | permission catalog, roles, `requirePermission`, provisioning bootstrap | ✅ verified (catalog seed + default roles + real `requirePermission` + FE real perms) |
 | **M3** Onboarding + Students | credential gen, onboarding engine, first real domain slice | ✅ verified (student.onboard tx + credential gen + roster/detail; notes retired) |
-| **M4** Control Plane | registration state machine, payment-proof, licensing | ✅ backend verified (register→approve→provision→license + cross-plane handoff); platform SPA deferred |
+| **M4** Control Plane | registration state machine, payment-proof, licensing | ✅ verified — backend + **platform SPA** (login, registrations review/approve, tenants, licenses) |
 | **M5** Teachers/Staff/Academics/Finance | replicate the M3 shape across slices | ✅ verified (teachers, staff, academics, finance; append-only ledgers DB-enforced) |
 | **M6** Sync & Offline | NATS relay + inbox + HLC; wiring, not rewrite | 🟡 core verified (relay → JetStream → idempotent durable hub + offline replay); HLC-merge/mTLS/DR deferred |
 | **M7** Guardian Portal & Mobile | child-scoped read API; Expo read-heavy | 🟡 portal verified (child-scoped read API + promote + FE); Expo mobile + T2 writes ⬜ |
@@ -302,8 +302,17 @@ without a platform token; duplicate slug 409.
 **Fixed:** `BootstrapTenant` School-Admin lookup now filters `tenant_id` explicitly (the
 superuser control plane bypasses RLS — relying on it cross-attached the wrong tenant's
 role; caught in live verification).
-**Deferred / carried-forward:** the platform **SPA** (`web/platform/`, separate build);
-MinIO payment-proof blob upload (metadata + storage_key wired); a control-plane audit log;
+**Platform SPA (`web/platform/`) — ✅ built & verified.** A SEPARATE Vite build (own
+`index.html`/`vite.config.ts`/entry, `npm run build:platform`) that reuses the tenant
+design system (`@/shared/ui`) but has its own platform-scoped auth + API client (control
+plane :8080, separate token namespace). Pages: superadmin login, dashboard (counts),
+**Registrations** (review queue + approve→provision→license with one-time admin creds
+shown, + reject), **Tenants**, **Licenses** (new `GET /platform/licenses` endpoint added).
+`tsc -b` typechecks both apps; `vite build --config platform/vite.config.ts` builds the
+separate bundle. Verified: every SPA endpoint live (login, queue, approve→`INV-2026-00003`
++ provisioned admin, tenants, licenses, 401 without token).
+**Deferred / carried-forward:** MinIO payment-proof blob upload (metadata + storage_key
+wired); platform subscriptions/analytics/support screens; a control-plane audit log;
 OpenAPI specs; automated DB-integration tests.
 
 ## Backend — `server/` (M5 Teachers & Staff) — ✅ verified
@@ -461,7 +470,7 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
 | communication | ADMIN | notices, notifications | ⬜ |
 | reports | ADMIN | dashboards, exports, backup | ⬜ |
 | learning (LMS) | TEACHER/STUDENT/GUARDIAN | teacher assignments + grading done; student/guardian planned | 🟡 (teacher T3a/T3b done) |
-| platform | SUPERADMIN | registrations, tenants, … | ⬜ SPA (separate build) — **M4 backend live** |
+| platform | SUPERADMIN | login + dashboard + registrations(approve/reject) + tenants + licenses built; subscriptions/analytics/support planned | 🟡 SPA core done (separate `web/platform` build) |
 
 ---
 
@@ -500,10 +509,10 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
    (promote + scoped reads + FE). Remaining M7: Expo mobile app + Tier-2 guarded writes.
 12b. ~~**M8** (LMS — content → assignments → submission/grading).~~ ✅ done & verified.
    **The phased roadmap M0→M8 is COMPLETE.**
-13b. **Post-roadmap polish (no roadmap milestone left):** platform SPA; academics setup +
-   student/guardian FE; LMS T3c (quizzes/discussion) + MinIO blob upload; Tier-2 guardian
-   writes; M6 hardening (HLC-merge for mutable rows, mTLS, cloud→node push-down, DR drill);
-   OpenAPI spec files + automated DB-integration tests.
+13b. **Post-roadmap polish (no roadmap milestone left):** ~~platform SPA~~ ✅ done;
+   remaining — academics setup + student/guardian FE; LMS T3c (quizzes/discussion) + MinIO
+   blob upload; Tier-2 guardian writes; M6 hardening (HLC-merge for mutable rows, mTLS,
+   cloud→node push-down, DR drill); OpenAPI spec files + automated DB-integration tests.
 9. **DoD backfill:** frozen OpenAPI spec files (`/auth/*`, `/access/*`, `/students/*`) +
    automated DB integration tests (RLS isolation, golden-rule atomicity); Redis cache for
    effective permissions; document upload (MinIO) + onboarding wizard/approval states.

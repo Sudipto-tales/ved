@@ -22,8 +22,9 @@ export const platformPages: PageDef[] = [
     title: 'Dashboard',
     persona: 'SUPERADMIN',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./features/dashboard/DashboardPage'),
   },
   {
     path: 'registrations',
@@ -31,8 +32,9 @@ export const platformPages: PageDef[] = [
     persona: 'SUPERADMIN',
     permission: 'platform.registration.review',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./features/registrations/RegistrationsPage'),
   },
   {
     // Approve / reject a pending school registration (docs/01 state machine).
@@ -67,8 +69,9 @@ export const platformPages: PageDef[] = [
     persona: 'SUPERADMIN',
     permission: 'platform.tenant.manage',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./features/tenants/TenantsPage'),
   },
   {
     // Provision / suspend / offboard a single tenant (docs/01, docs/11).
@@ -99,8 +102,9 @@ export const platformPages: PageDef[] = [
     persona: 'SUPERADMIN',
     permission: 'platform.license.manage',
     tier: 'T2',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./features/licenses/LicensesPage'),
   },
   {
     // MRR/ARR, active/trial/churned, renewals, revenue by plan (docs/11 platform dashboard).
