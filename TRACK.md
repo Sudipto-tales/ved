@@ -5,7 +5,26 @@ The single place that records **how far the build has progressed** against the p
 
 **Legend:** ✅ done · 🟡 scaffolded / partial · ⬜ not started
 
-> **YOU ARE HERE:** M6 (Sync & Offline) **core complete and verified** — the system is now
+> **YOU ARE HERE:** M7 (Guardian Portal) **complete and verified** — child-scoped read
+> access on top of RLS. Per docs/18 the guardian is *an actor + a portal, not a slice*:
+> the only schema change is a nullable `guardian.membership_id` (links a login to a
+> contact record). A staff **promote** flow (`POST /students/guardians/{id}/promote`,
+> `student.update`) gives a contact-only guardian a GUARDIAN login + the seeded
+> **Guardian** role (auto guardian.* perms) via the shared onboarding engine. The new
+> **`guardian` feature** owns no tables — it's a child-scoped projection: it resolves the
+> caller's `guardian_id` from their membership, then restricts every read to the
+> `guardian_student` set (query layer) **on top of** RLS (defence-in-depth), reusing the
+> academics + finance *services* (not their tables). Verified live: promoted guardian
+> logs in with 4 guardian.* perms (not tenant.admin); sees only their **one** linked child;
+> reads that child's fees (outstanding 3000) + attendance (200); **a foreign child →
+> 403** (both fees & attendance); a non-guardian (admin) → 403; the guardian can't touch a
+> staff endpoint (`/students` → 403). FE: guardian dashboard (multi-child switcher) + child
+> attendance + child fees, `tsc -b` + `vite build` clean. Next: **M8 (LMS)**, Tier-2
+> guarded writes (online pay, leave requests), the Expo mobile app, or finishing
+> M6 hardening. _DoD carried forward as before (OpenAPI specs, DB-integration tests,
+> platform SPA, academics FE, HLC-merge/mTLS/DR)._
+
+> **(prev) M6 (Sync & Offline) — core complete and verified** — the system is now
 > local-first. Because every mutation already wrote an `outbox` row in its transaction
 > (the golden rule, since M0), this was **wiring, not a rewrite**. A **relay** worker on the
 > node publishes unsent outbox rows to **NATS JetStream** (`tenant.<id>.<aggregate>.<op>`,
@@ -138,7 +157,7 @@ The single place that records **how far the build has progressed** against the p
 | **M4** Control Plane | registration state machine, payment-proof, licensing | ✅ backend verified (register→approve→provision→license + cross-plane handoff); platform SPA deferred |
 | **M5** Teachers/Staff/Academics/Finance | replicate the M3 shape across slices | ✅ verified (teachers, staff, academics, finance; append-only ledgers DB-enforced) |
 | **M6** Sync & Offline | NATS relay + inbox + HLC; wiring, not rewrite | 🟡 core verified (relay → JetStream → idempotent durable hub + offline replay); HLC-merge/mTLS/DR deferred |
-| **M7** Guardian Portal & Mobile | child-scoped read API; Expo read-heavy | ⬜ |
+| **M7** Guardian Portal & Mobile | child-scoped read API; Expo read-heavy | 🟡 portal verified (child-scoped read API + promote + FE); Expo mobile + T2 writes ⬜ |
 | **M8** LMS | content → assignments → submission/grading | ⬜ |
 
 ---
@@ -338,6 +357,29 @@ the buffered event. Pillars 1–4 live.
 mTLS + per-tenant NATS accounts; cloud→node config push-down; snapshot/replay bootstrap +
 DR drill; local WAL archiving; offline license-grace lock.
 
+## Backend — `server/` (M7 Guardian Portal) — ✅ verified
+
+A guardian is an actor + a portal, not a slice (docs/18). The portal owns no tables — it
+is a child-scoped projection over students/academics/finance, the security boundary
+enforced at the query layer (guardian_student) AND by RLS.
+
+| Component | File(s) | Status |
+|---|---|---|
+| Migration: nullable `guardian.membership_id` (login → contact link) + partial unique | `db/migrations/00009_guardian_portal.sql` | ✅ applied |
+| Seeded **Guardian** default role (guardian.* perms), auto-attached on promotion | `internal/platform/authz/catalog.go` | ✅ |
+| Promote-guardian (`POST /students/guardians/{id}/promote`, `student.update`) → GUARDIAN login + Guardian role via the engine | `internal/features/students/students.go` | ✅ golden rule |
+| `guardian` feature (no tables): resolve guardian_id → children, child attendance (reuses academics svc), child fees (reuses finance svc) | `internal/features/guardian/guardian.go` | ✅ |
+| Node wiring | `cmd/node/main.go` | ✅ |
+| Frontend: guardian dashboard (multi-child switcher) + child attendance + child fees | `web/src/features/guardians/` | ✅ |
+
+**Live verification:** promoted guardian logs in with 4 guardian.* perms (not tenant.admin);
+sees only their 1 linked child; own child fees (outstanding 3000) + attendance 200;
+**foreign child → 403** (fees & attendance); non-guardian admin → 403; guardian → staff
+`/students` 403.
+**Carried-forward:** Tier-2 guarded writes (online fee pay via gateway, leave requests,
+contact update via maker-checker); child marks/timetable reads; the Expo mobile app
+(read-heavy, reuses this API + generated client).
+
 ## Frontend — `web/` (M0) — 🟡 architecture scaffolded
 
 | Component | File(s) | Status |
@@ -371,7 +413,7 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
 | teachers | ADMIN/STAFF/TEACHER | mgmt (roster/onboard/detail) done; portal planned | 🟡 (mgmt done) |
 | staff | ADMIN/STAFF | mgmt (roster/onboard/detail) | ✅ (mgmt done) |
 | onboarding | STAFF/ADMIN | wizard, approvals | ⬜ |
-| guardians | GUARDIAN | portal (multi-child, fees, …) | ⬜ |
+| guardians | GUARDIAN | portal (dashboard + child attendance + fees done; marks/timetable/T2 planned) | 🟡 (T1 reads done) |
 | academics | ADMIN | programs…timetable | 🟡 backend done (structure + append-only attendance/marks); FE planned |
 | finance | ADMIN/STAFF | fees, ledger, audit | 🟡 backend done (append-only ledger); FE student-ledger done |
 | access | ADMIN | roles, user-roles built; designations/maker-checker planned | 🟡 (roles + user-roles done) |
@@ -414,8 +456,10 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
    verified — M5 complete (all four slices; DB-enforced append-only immutability).
 10b. ~~**M6 (sync):** wire the outbox to NATS/JetStream.~~ ✅ core done & verified (relay →
    JetStream → idempotent durable hub + offline replay).
-11b. **Next:** **M7** (Guardian Portal & Mobile — child-scoped read API); finish M6
-   (HLC-merge for mutable rows, mTLS, cloud→node push-down, DR drill); the platform SPA;
+11b. ~~**M7** (Guardian Portal — child-scoped read API).~~ ✅ portal done & verified
+   (promote + scoped reads + FE). Remaining M7: Expo mobile app + Tier-2 guarded writes.
+12b. **Next:** **M8** (LMS — content → assignments → submission/grading); Tier-2 guardian
+   writes (online pay, leave); finish M6 hardening (HLC-merge, mTLS, DR); the platform SPA;
    or academics/finance config + FE.
 9. **DoD backfill:** frozen OpenAPI spec files (`/auth/*`, `/access/*`, `/students/*`) +
    automated DB integration tests (RLS isolation, golden-rule atomicity); Redis cache for

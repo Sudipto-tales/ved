@@ -7,8 +7,9 @@ export const guardiansPages: PageDef[] = [
     title: 'Dashboard',
     persona: 'GUARDIAN',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/GuardianDashboard'),
   },
   {
     path: 'guardian/children/:childId/attendance',
@@ -16,8 +17,9 @@ export const guardiansPages: PageDef[] = [
     persona: 'GUARDIAN',
     permission: 'guardian.read_child',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/ChildAttendancePage'),
   },
   {
     path: 'guardian/children/:childId/marks',
@@ -43,8 +45,9 @@ export const guardiansPages: PageDef[] = [
     persona: 'GUARDIAN',
     permission: 'guardian.read_fees',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/ChildFeesPage'),
   },
   {
     path: 'guardian/notices',

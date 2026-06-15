@@ -139,6 +139,65 @@ func NewService(repo *Repo, engine *onboarding.Engine) *Service {
 	return &Service{repo: repo, engine: engine}
 }
 
+// GuardianCredResult is the one-time login a promoted guardian receives (docs/18).
+type GuardianCredResult struct {
+	GuardianID      uuid.UUID `json:"guardian_id"`
+	MembershipID    uuid.UUID `json:"membership_id"`
+	LoginIdentifier string    `json:"login_identifier"`
+	TempPassword    string    `json:"temp_password"`
+}
+
+// PromoteGuardian gives an existing (contact-only) guardian portal access: a GUARDIAN
+// login + membership + the Guardian role, in one tx. The guardian's child links already
+// exist (guardian_student); promotion just adds the identity. Idempotent-ish: a guardian
+// already promoted is rejected.
+func (s *Service) PromoteGuardian(ctx context.Context, tenantID, actor, guardianID uuid.UUID) (GuardianCredResult, error) {
+	var res GuardianCredResult
+	err := s.engine.WithTenant(ctx, tenantID, func(tx pgx.Tx) error {
+		var name string
+		var existing *uuid.UUID
+		err := tx.QueryRow(ctx, `SELECT name, membership_id FROM guardian WHERE id=$1 AND deleted_at IS NULL`, guardianID).Scan(&name, &existing)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if existing != nil {
+			return fmt.Errorf("%w: guardian already has portal access", ErrInvalidInput)
+		}
+		// Resolve the seeded Guardian role for THIS tenant (defence-in-depth: explicit tenant_id).
+		var roleID uuid.UUID
+		if err := tx.QueryRow(ctx, `SELECT id FROM roles WHERE name=$1 AND tenant_id=$2 AND deleted_at IS NULL`, authz.GuardianRole, tenantID).Scan(&roleID); err != nil {
+			return fmt.Errorf("guardian role not provisioned: %w", err)
+		}
+		slug, err := onboarding.SchoolSlug(ctx, tx)
+		if err != nil {
+			return err
+		}
+		hlc := onboarding.NowHLC()
+		member, err := s.engine.CreateMember(ctx, tx, onboarding.MemberInput{
+			TenantID: tenantID, Actor: actor, Name: name, UserType: "GUARDIAN",
+			SchoolSlug: slug, RoleIDs: []uuid.UUID{roleID}, HLC: hlc,
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx,
+			`UPDATE guardian SET membership_id=$2, updated_at=now(), version=version+1, hlc=$3 WHERE id=$1`,
+			guardianID, member.MembershipID, hlc); err != nil {
+			return fmt.Errorf("link guardian membership: %w", err)
+		}
+		b, _ := json.Marshal(map[string]any{"guardian_id": guardianID, "membership_id": member.MembershipID, "login": member.Login})
+		if err := s.engine.WriteEventAndAudit(ctx, tx, tenantID, "guardian", guardianID, "guardian.promoted", actor, b, hlc); err != nil {
+			return err
+		}
+		res = GuardianCredResult{GuardianID: guardianID, MembershipID: member.MembershipID, LoginIdentifier: member.Login, TempPassword: member.TempPassword}
+		return nil
+	})
+	return res, err
+}
+
 // Onboard runs the whole admission in one transaction (flow A). Returns the generated
 // login + one-time temp password.
 func (s *Service) Onboard(ctx context.Context, tenantID, actor uuid.UUID, in OnboardInput) (OnboardResult, error) {
@@ -312,6 +371,22 @@ func Register(r chi.Router, pool *pgxpool.Pool, nodeID uuid.UUID, res *authz.Res
 				return
 			}
 			out, err := svc.Onboard(req.Context(), httpx.TenantID(req.Context()), actorID(req), in)
+			if err != nil {
+				writeErr(w, err)
+				return
+			}
+			httpx.JSON(w, http.StatusCreated, out)
+		})
+
+	// Promote a contact-only guardian to a portal user (M7).
+	r.With(authz.Require(res, "student.update")).Post("/api/v1/students/guardians/{id}/promote",
+		func(w http.ResponseWriter, req *http.Request) {
+			gid, err := uuid.Parse(chi.URLParam(req, "id"))
+			if err != nil {
+				httpx.Error(w, http.StatusBadRequest, "invalid guardian id")
+				return
+			}
+			out, err := svc.PromoteGuardian(req.Context(), httpx.TenantID(req.Context()), actorID(req), gid)
 			if err != nil {
 				writeErr(w, err)
 				return

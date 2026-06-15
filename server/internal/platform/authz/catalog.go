@@ -86,7 +86,13 @@ var DefaultRoles = []DefaultRole{
 	{"Class Teacher", []string{"student.read", "attendance.mark", "marks.enter", "exam.manage"}},
 	{"Accountant", []string{"fee.manage", "payment.record", "receipt.issue"}},
 	{"Student", []string{}},
+	// Auto-assigned when a guardian is promoted to a portal user (M7, docs/18). Always
+	// self-scoped to the guardian's own children via guardian_student.
+	{"Guardian", []string{"guardian.read_child", "guardian.read_fees", "guardian.update_own_contact", "guardian.request_leave"}},
 }
+
+// GuardianRole is the role attached to a promoted guardian (docs/18).
+const GuardianRole = "Guardian"
 
 // SchoolAdminRole is the role the first admin is bootstrapped into.
 const SchoolAdminRole = "School Admin"
