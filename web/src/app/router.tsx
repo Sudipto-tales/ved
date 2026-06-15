@@ -48,7 +48,7 @@ export const router = createBrowserRouter([
           {
             element: <AppShell />,
             children: [
-              { index: true, element: <Navigate to="/notes" replace /> },
+              { index: true, element: <Navigate to="/students" replace /> },
               ...protectedPages.map((p) => ({ path: p.path, element: elementFor(p) })),
             ],
           },

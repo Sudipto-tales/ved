@@ -2,5 +2,5 @@
 // features. Each feature adds its namespace here.
 export const queryKeys = {
   health: ['health'] as const,
-  notes: ['notes'] as const,
+  students: ['students'] as const,
 };

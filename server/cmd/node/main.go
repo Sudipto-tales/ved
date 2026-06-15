@@ -13,7 +13,7 @@ import (
 	"github.com/weloin/ved/internal/features/access"
 	"github.com/weloin/ved/internal/features/health"
 	"github.com/weloin/ved/internal/features/identity"
-	"github.com/weloin/ved/internal/features/notes"
+	"github.com/weloin/ved/internal/features/students"
 	"github.com/weloin/ved/internal/platform/auth"
 	"github.com/weloin/ved/internal/platform/authz"
 	"github.com/weloin/ved/internal/platform/config"
@@ -58,12 +58,21 @@ func main() {
 		slog.Error("seed permission catalog", "err", err)
 	}
 
+	// Students (M3): the first real domain slice.
+	studentsRepo := students.NewRepo(pool, nodeID)
+
 	if cfg.DevSeed {
+		devTenant := uuid.MustParse(identity.DevTenantID)
 		adminMembershipID, err := identity.SeedDevAdmin(ctx, identRepo)
 		if err != nil {
 			slog.Error("dev seed", "err", err)
-		} else if err := access.BootstrapTenant(ctx, accessRepo, uuid.MustParse(identity.DevTenantID), adminMembershipID); err != nil {
+		} else if err := access.BootstrapTenant(ctx, accessRepo, devTenant, adminMembershipID); err != nil {
 			slog.Error("rbac bootstrap", "err", err)
+		}
+		// Minimal tenant profile so the login-handle generator has a slug (M4 control
+		// plane provisions this for real tenants).
+		if err := students.SeedTenantProfile(ctx, studentsRepo, devTenant, "ved", "VED Demo School"); err != nil {
+			slog.Error("seed tenant profile", "err", err)
 		}
 	}
 
@@ -85,7 +94,7 @@ func main() {
 		g.Use(httpx.Authenticator(jwtMgr))
 		g.Use(httpx.TenantContext)
 		access.Register(g, pool, nodeID, resolver)
-		notes.Register(g, pool, nodeID)
+		students.Register(g, pool, nodeID, resolver)
 	})
 
 	if err := httpx.Serve(cfg.HTTPAddr, r); err != nil {

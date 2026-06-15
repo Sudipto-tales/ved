@@ -4,7 +4,6 @@
 import type { PageDef } from '@/shared/types/page';
 
 import { authPages } from '@/features/auth/routes';
-import { notesPages } from '@/features/notes/routes';
 import { studentsPages } from '@/features/students/routes';
 import { teachersPages } from '@/features/teachers/routes';
 import { staffPages } from '@/features/staff/routes';
@@ -22,7 +21,6 @@ import { helpPages } from '@/features/help/routes';
 export const allPages: PageDef[] = [
   ...authPages,
   ...helpPages,
-  ...notesPages,
   ...studentsPages,
   ...teachersPages,
   ...staffPages,

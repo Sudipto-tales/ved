@@ -5,7 +5,28 @@ The single place that records **how far the build has progressed** against the p
 
 **Legend:** ✅ done · 🟡 scaffolded / partial · ⬜ not started
 
-> **YOU ARE HERE:** M2 (RBAC) **complete and verified**. The `requirePermission` gate is
+> **YOU ARE HERE:** M3 (Onboarding + Students) **complete and verified** — the first real
+> domain slice, which completes the walking skeleton. `student.onboard` runs the whole
+> admission in **one transaction** (flow A): global `users` (generated login handle +
+> temp password, `must_reset_password`) + `memberships` (STUDENT) [+ optional roles] +
+> `student` profile + `guardian`(s) + `guardian_student` links + `outbox[student.enrolled]`
+> + audit. A kernel credential generator (`internal/platform/credential`) produces the
+> `{name}.{type}@{slug}.com` handle with global-uniqueness increment + a one-time temp
+> password (unit-tested). A minimal `tenant_profile` (just `slug`) is seeded for the dev
+> tenant (full tenant-setup slice + control-plane provisioning come at M4). The `notes`
+> demo slice is **retired** (BE + FE removed; index now redirects to `/students`).
+> Verified end-to-end: onboard 201 with golden rule (1 student ⇒ 1 outbox ⇒ 1 audit, +1
+> guardian_student); handle `johndoe.student@ved.com` then `johndoe2.student@ved.com` on
+> collision; new student `must_reset_password=true` on first login; duplicate admission
+> 409; roster/detail 200; no-token 401; RLS on `student` as `ved_app` (own 2, foreign 0).
+> Frontend: roster + onboard wizard (shows credentials once) + detail screens, `tsc -b` +
+> `vite build` clean. Next: **M4** (Control Plane) and/or **M5** (replicate the slice for
+> teachers/staff/academics/finance). _DoD gaps carried forward: OpenAPI spec files;
+> automated DB-integration tests (RLS/golden-rule proven live; credential/gate logic
+> unit-tested); document upload (person_document table exists; MinIO path is M4); the
+> multi-step onboarding wizard + approval states (skip/direct path shipped)._
+
+> **(prev) M2 (RBAC) — complete and verified.** The `requirePermission` gate is
 > real and backed by data: a code-defined permission catalog (31 keys) is seeded at
 > startup into the global `permissions` table; tenant provisioning seeds default system
 > roles (School Admin, Admission Officer, Class Teacher, Accountant, Student) + their
@@ -35,7 +56,7 @@ The single place that records **how far the build has progressed** against the p
 | **M0** Foundations & walking skeleton | repo layout, migration+RLS, middleware chain, one slice end-to-end, FE shell | ✅ verified (skeleton + RLS enforcing) |
 | **M1** Identity & Tenancy | real `users`/`memberships`, JWT login, tenant resolve | ✅ verified (argon2id + JWT + memberships + RLS-authorised tenant) |
 | **M2** RBAC | permission catalog, roles, `requirePermission`, provisioning bootstrap | ✅ verified (catalog seed + default roles + real `requirePermission` + FE real perms) |
-| **M3** Onboarding + Students | credential gen, onboarding engine, first real domain slice | ⬜ |
+| **M3** Onboarding + Students | credential gen, onboarding engine, first real domain slice | ✅ verified (student.onboard tx + credential gen + roster/detail; notes retired) |
 | **M4** Control Plane | registration state machine, payment-proof, licensing | ⬜ |
 | **M5** Teachers/Staff/Academics/Finance | replicate the M3 shape across slices | ⬜ |
 | **M6** Sync & Offline | NATS relay + inbox + HLC; wiring, not rewrite | ⬜ |
@@ -75,7 +96,7 @@ reference are all written and cross-linked.
 | Migrations (embedded, goose) | `db/migrations/{embed.go,00001_cross_cutting.sql}` | ✅ written |
 | Cross-cutting tables + RLS | migration 00001: `outbox`,`inbox`,`sync_cursor`,`audit_log` | ✅ written |
 | Non-superuser app role (RLS enforcement) | migration 00002 `ved_app` + pool `SET ROLE` | ✅ verified isolating |
-| Demo slice (golden rule) | `internal/features/notes` (row+outbox+audit in 1 tx) | ✅ written |
+| Demo slice (golden rule) | `internal/features/notes` (row+outbox+audit in 1 tx) | ✅ proved the seam, then **retired at M3** (replaced by `students`) |
 | Health/readiness | `internal/features/health` | ✅ written |
 | **Compile + run verified** | — | ✅ `go build` 0; ✅ `./ved.sh up` round-trip (notes POST/GET, golden rule, 400 on no tenant) |
 
@@ -123,6 +144,23 @@ foreign-tenant 403; no-token 401; RLS on `roles` as `ved_app` (own 6, foreign 0)
 **Carried-forward:** Redis cache of effective perms (currently per-request DB resolve);
 OpenAPI spec file; automated DB-integration tests.
 
+## Backend — `server/` (M3 Onboarding + Students) — ✅ verified
+
+| Component | File(s) | Status |
+|---|---|---|
+| Migration `tenant_profile`(minimal slug subset) + `student`/`guardian`/`guardian_student`/`person_document` (tenant-scoped + RLS) | `db/migrations/00005_people.sql` | ✅ applied |
+| Kernel credential generator (slugify, type suffix, global-unique handle, temp password) | `internal/platform/credential/` | ✅ + unit tests |
+| `students` slice: `student.onboard` (one-tx flow A), roster, detail | `internal/features/students/students.go` | ✅ golden rule |
+| Dev tenant_profile seed (slug `ved`) | `internal/features/students/provisioning.go` | ✅ idempotent |
+| Node wiring (mount students, seed profile) + **notes demo retired** | `cmd/node/main.go` | ✅ |
+
+**Live verification:** onboard 201 → 1 student ⇒ 1 outbox[student.enrolled] ⇒ 1 audit
+(+1 guardian_student); handle `johndoe.student@ved.com` then `…johndoe2…` on collision;
+new student `must_reset_password=true`; duplicate admission 409; roster/detail 200;
+no-token 401; RLS on `student` as `ved_app` (own 2, foreign 0).
+**Carried-forward:** OpenAPI spec; DB-integration tests; document upload (MinIO, M4);
+onboarding wizard/approval states (direct/skip path shipped).
+
 ## Frontend — `web/` (M0) — 🟡 architecture scaffolded
 
 | Component | File(s) | Status |
@@ -151,8 +189,8 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
 |---|---|---|---|
 | auth | PUBLIC | login, select-tenant, reset-password, no-access (+forgot planned) | ✅ (real JWT) |
 | help | ALL | index + per-topic (`/help`, `/help/:slug`) + contextual `?` icons | ✅ |
-| notes (demo) | ADMIN | 1 | ✅ |
-| students | ADMIN/STAFF/STUDENT | roster, onboard, portal | ⬜ |
+| notes (demo) | ADMIN | retired at M3 | — (removed) |
+| students | ADMIN/STAFF/STUDENT | roster, onboard, detail built; import/portal planned | 🟡 (roster + onboard + detail done) |
 | teachers | ADMIN/STAFF/TEACHER | mgmt + teacher portal | ⬜ |
 | staff | ADMIN/STAFF | mgmt | ⬜ |
 | onboarding | STAFF/ADMIN | wizard, approvals | ⬜ |
@@ -183,13 +221,20 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
    (the dev wildcard `['*']` in the FE auth provider flips to real perms here).~~ ✅ done
    & verified (catalog seed, default roles, `authz.Require`, FE real perms via
    `/me/permissions`).
-7. **Begin M3 (Onboarding + Students):** credential/email generator + config-driven
-   onboarding engine in the kernel, `student`/`guardian` tables, `student.onboard` in one
-   tx (users + memberships + profile + guardian links + outbox + audit), gated by
-   `requirePermission("student.onboard")`. The `notes` demo slice retires here.
-8. **DoD backfill:** frozen OpenAPI spec files (`/auth/*`, `/access/*`) + automated DB
-   integration tests (RLS isolation, golden-rule atomicity); Redis cache for effective
-   permissions.
+7. ~~**Begin M3 (Onboarding + Students):** credential/email generator + onboarding,
+   `student`/`guardian` tables, `student.onboard` in one tx, gated by
+   `requirePermission("student.onboard")`. The `notes` demo slice retires here.~~ ✅ done
+   & verified (credential generator, one-tx onboard, roster/onboard/detail screens, notes
+   retired).
+8. **Begin M4 (Control Plane) and/or M5 (replicate):** M4 — `cmd/controlplane` slices for
+   school registration state machine, payment-proof (MinIO), licensing, tenant
+   provisioning (which calls the M2 RBAC bootstrap + M3 tenant_profile seed for real
+   tenants). M5 — clone the M3 shape for `teachers`/`staff` (reuse the onboarding engine)
+   then `academics`/`finance`. These can run in parallel after the spine (M0→M3) — now
+   complete.
+9. **DoD backfill:** frozen OpenAPI spec files (`/auth/*`, `/access/*`, `/students/*`) +
+   automated DB integration tests (RLS isolation, golden-rule atomicity); Redis cache for
+   effective permissions; document upload (MinIO) + onboarding wizard/approval states.
 
 ## Definition of done per slice
 
