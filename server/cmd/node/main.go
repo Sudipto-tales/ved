@@ -109,7 +109,7 @@ func main() {
 		}
 	}
 
-	r := httpx.NewRouter("node")
+	r := httpx.NewRouter("node", cfg.CORSOrigins...)
 	health.Register(r, pool)
 
 	// Public: unauthenticated auth endpoints.

@@ -77,7 +77,7 @@ func main() {
 		}
 	}
 
-	r := httpx.NewRouter("controlplane")
+	r := httpx.NewRouter("controlplane", cfg.CORSOrigins...)
 	health.Register(r, pool)
 
 	// Public: platform login + self-service school registration / payment-proof upload.

@@ -19,9 +19,13 @@ import (
 )
 
 // NewRouter returns a chi router with the common middleware stack and a /healthz
-// liveness endpoint that walks the whole chain.
-func NewRouter(serviceName string) *chi.Mux {
+// liveness endpoint that walks the whole chain. allowedOrigins enables browser CORS
+// (the SPA and the API are served from different origins in dev: :5173/:5174 vs :8081).
+func NewRouter(serviceName string, allowedOrigins ...string) *chi.Mux {
 	r := chi.NewRouter()
+	if len(allowedOrigins) > 0 {
+		r.Use(CORS(allowedOrigins)) // first: must answer OPTIONS before auth/tenant gates
+	}
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
@@ -33,6 +37,42 @@ func NewRouter(serviceName string) *chi.Mux {
 		JSON(w, http.StatusOK, map[string]string{"status": "ok", "service": serviceName})
 	})
 	return r
+}
+
+// CORS is a small browser-CORS middleware. It reflects an allowed Origin, advertises the
+// methods + headers the clients use (incl. the custom X-Tenant-ID), and short-circuits
+// the preflight OPTIONS — which must happen BEFORE the auth/tenant middleware, or a
+// preflight to a protected route would be rejected 401. Use "*" to allow any origin.
+func CORS(allowed []string) func(http.Handler) http.Handler {
+	allowAny := false
+	set := make(map[string]bool, len(allowed))
+	for _, o := range allowed {
+		if o == "*" {
+			allowAny = true
+		}
+		set[o] = true
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
+			if origin != "" && (allowAny || set[origin]) {
+				if allowAny {
+					w.Header().Set("Access-Control-Allow-Origin", "*")
+				} else {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+					w.Header().Add("Vary", "Origin")
+				}
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Tenant-ID")
+				w.Header().Set("Access-Control-Max-Age", "300")
+			}
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // Serve runs the HTTP server with graceful shutdown on SIGINT/SIGTERM.

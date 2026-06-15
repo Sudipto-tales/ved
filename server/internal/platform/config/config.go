@@ -2,7 +2,10 @@
 // stack (docker-compose.yml) supplies these; defaults keep local runs working.
 package config
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 type Config struct {
 	HTTPAddr    string
@@ -23,6 +26,9 @@ type Config struct {
 	// DevSeed, when true, idempotently seeds a demo tenant + admin user on startup so
 	// login works out of the box before control-plane provisioning exists (M4).
 	DevSeed bool
+	// CORSOrigins are the browser origins allowed to call this API (the SPA dev servers).
+	// The tenant app runs on :5173, the platform SPA on :5174.
+	CORSOrigins []string
 }
 
 // FromEnv reads config, falling back to defaultAddr for the HTTP listen address.
@@ -37,7 +43,19 @@ func FromEnv(defaultAddr string) Config {
 		PlatformJWTSecret: env("PLATFORM_JWT_SECRET", "dev-insecure-platform-secret-change-me"),
 		LicenseSigningKey: env("LICENSE_SIGNING_KEY", "dev-insecure-license-key-change-me"),
 		DevSeed:           env("DEV_SEED", "true") == "true",
+		CORSOrigins:       splitCSV(env("CORS_ORIGINS", "http://localhost:5173,http://localhost:5174")),
 	}
+}
+
+// splitCSV splits a comma-separated list and trims blanks (e.g. CORS_ORIGINS).
+func splitCSV(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if v := strings.TrimSpace(p); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 func env(key, def string) string {
