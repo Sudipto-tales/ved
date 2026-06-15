@@ -20,11 +20,13 @@ import (
 	"github.com/weloin/ved/internal/features/teachers"
 	"github.com/weloin/ved/internal/platform/auth"
 	"github.com/weloin/ved/internal/platform/authz"
+	"github.com/weloin/ved/internal/platform/bus"
 	"github.com/weloin/ved/internal/platform/config"
 	"github.com/weloin/ved/internal/platform/db"
 	"github.com/weloin/ved/internal/platform/httpx"
 	"github.com/weloin/ved/internal/platform/migrate"
 	"github.com/weloin/ved/internal/platform/onboarding"
+	syncrelay "github.com/weloin/ved/internal/platform/sync"
 )
 
 func main() {
@@ -82,6 +84,26 @@ func main() {
 		// Minimal current academic year so sections/exams work out of the box (M5).
 		if err := academics.SeedDevAcademicYear(ctx, onboarding.NewEngine(pool, nodeID), devTenant); err != nil {
 			slog.Error("seed academic year", "err", err)
+		}
+	}
+
+	// Sync (M6): relay the transactional outbox to JetStream. Tolerant of NATS being
+	// down — the node keeps serving its LAN offline and the relay catches up on reconnect.
+	if b, err := bus.Connect(cfg.NATSURL); err != nil {
+		slog.Warn("sync disabled: nats connect failed", "err", err)
+	} else {
+		defer b.Close()
+		if err := b.EnsureStream(); err != nil {
+			slog.Warn("sync: ensure stream", "err", err)
+		}
+		// The relay spans every tenant the node hosts, so it uses an owner connection
+		// (bypasses RLS) — the same posture as migrations.
+		if relayPool, err := db.Connect(ctx, cfg.DatabaseURL, ""); err != nil {
+			slog.Error("sync relay pool", "err", err)
+		} else {
+			defer relayPool.Close()
+			go syncrelay.NewRelay(relayPool, b).Run(ctx)
+			slog.Info("sync relay started", "nats", cfg.NATSURL)
 		}
 	}
 

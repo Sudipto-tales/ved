@@ -5,7 +5,26 @@ The single place that records **how far the build has progressed** against the p
 
 **Legend:** ✅ done · 🟡 scaffolded / partial · ⬜ not started
 
-> **YOU ARE HERE:** M5 **complete and verified** — all four replication slices done
+> **YOU ARE HERE:** M6 (Sync & Offline) **core complete and verified** — the system is now
+> local-first. Because every mutation already wrote an `outbox` row in its transaction
+> (the golden rule, since M0), this was **wiring, not a rewrite**. A **relay** worker on the
+> node publishes unsent outbox rows to **NATS JetStream** (`tenant.<id>.<aggregate>.<op>`,
+> dedup MsgId = event id) and marks them sent; the cloud **sync hub** (`cmd/controlplane`)
+> runs a **durable** JetStream consumer that idempotently records every tenant's events in
+> the durable history `control_plane.sync_event` (PK on event_id = the inbox dedupe).
+> Verified live on real JetStream: the relay drained the **54-event backlog** (M1–M5) into
+> the cloud history and marked the outbox sent; a fresh onboard flowed end-to-end (+1);
+> **idempotency** — re-arming an event republished it with **no duplicate** in the cloud
+> (JetStream MsgId + PK); and the **offline-replay drill** — hub killed, node kept
+> producing (events buffered in JetStream), hub restarted → its durable cursor **resumed**
+> and applied the buffered event. Pillars 1–4 (outbox · UUIDv7 · JetStream · idempotent
+> inbox + resumable cursor) are live; the append-only ledgers (M5) already cover
+> "lossless where it matters". _Deferred/carried-forward: per-field HLC LWW merge for
+> mutable rows + tombstone apply (pillar 5); mTLS + per-tenant NATS accounts; cloud→node
+> config push-down; snapshot/replay bootstrap + DR drill; local WAL archiving; offline
+> license grace. Plus the platform SPA, academics FE, OpenAPI specs, DB-integration tests._
+
+> **(prev) M5 — complete and verified** — all four replication slices done
 > (teachers, staff, **academics**, **finance**). The design care point — **append-only
 > ledgers** — is proven end to end. Academics adds the structure (program → stage →
 > subject → section → enrollment + exam) plus the two append-only ledgers
@@ -118,7 +137,7 @@ The single place that records **how far the build has progressed** against the p
 | **M3** Onboarding + Students | credential gen, onboarding engine, first real domain slice | ✅ verified (student.onboard tx + credential gen + roster/detail; notes retired) |
 | **M4** Control Plane | registration state machine, payment-proof, licensing | ✅ backend verified (register→approve→provision→license + cross-plane handoff); platform SPA deferred |
 | **M5** Teachers/Staff/Academics/Finance | replicate the M3 shape across slices | ✅ verified (teachers, staff, academics, finance; append-only ledgers DB-enforced) |
-| **M6** Sync & Offline | NATS relay + inbox + HLC; wiring, not rewrite | ⬜ |
+| **M6** Sync & Offline | NATS relay + inbox + HLC; wiring, not rewrite | 🟡 core verified (relay → JetStream → idempotent durable hub + offline replay); HLC-merge/mTLS/DR deferred |
 | **M7** Guardian Portal & Mobile | child-scoped read API; Expo read-heavy | ⬜ |
 | **M8** LMS | content → assignments → submission/grading | ⬜ |
 
@@ -296,6 +315,29 @@ foreign-tenant 0.
 **Carried-forward:** academics setup/attendance FE; fee structures/schedules/concessions/
 fines; COURSE_BASED mode; timetable; full tenant-setup slice (terms, rooms, dropdowns).
 
+## Backend — `server/` (M6 Sync & Offline) — 🟡 core verified
+
+Local-first by WIRING the existing outbox to JetStream — no rewrite (every write has
+routed through the outbox since M0).
+
+| Component | File(s) | Status |
+|---|---|---|
+| NATS JetStream transport kernel (connect, ensure stream, publish w/ MsgId, durable subscribe) | `internal/platform/bus/bus.go` | ✅ |
+| Sync envelope + subject scheme `tenant.<id>.<aggregate>.<op>` | `internal/platform/sync/sync.go` | ✅ |
+| Relay worker: unsent outbox → JetStream → mark sent (owner conn, spans tenants; at-least-once) | `internal/platform/sync/sync.go` | ✅ |
+| Cloud durable history store + idempotent inbox (PK on event_id) | `db/cpmigrations/00002_sync.sql` (`control_plane.sync_event`) | ✅ applied |
+| Sync hub: durable consumer `tenant.>` → idempotent apply | `internal/features/synchub/synchub.go` | ✅ |
+| Wiring: relay in `cmd/node`, hub in `cmd/controlplane` (both NATS-down tolerant) | `cmd/*/main.go` | ✅ |
+
+**Live verification (real JetStream):** relay drained the 54-event M1–M5 backlog into the
+cloud history + marked outbox sent; fresh onboard flowed end-to-end (+1); re-armed event
+republished with **no duplicate** (MsgId + PK dedup); **offline replay** — hub down → node
+kept producing (buffered in JetStream) → hub restart resumed its durable cursor and applied
+the buffered event. Pillars 1–4 live.
+**Carried-forward:** pillar 5 (per-field HLC LWW merge for mutable rows + tombstone apply);
+mTLS + per-tenant NATS accounts; cloud→node config push-down; snapshot/replay bootstrap +
+DR drill; local WAL archiving; offline license-grace lock.
+
 ## Frontend — `web/` (M0) — 🟡 architecture scaffolded
 
 | Component | File(s) | Status |
@@ -370,10 +412,11 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
    via a shared kernel **onboarding engine** (students refactored onto it too).
 9b. ~~**Next:** `academics`/`finance` (append-only ledgers/marks/attendance).~~ ✅ done &
    verified — M5 complete (all four slices; DB-enforced append-only immutability).
-10b. **Next:** the platform SPA (`web/platform/`, M4's deferred FE); **M6 (sync)** — wiring
-   the outbox to NATS/JetStream (every write already routes through the outbox, so it's
-   plumbing not a rewrite); or fill out academics/finance config + FE (fee structures,
-   timetable, attendance UI, full tenant-setup).
+10b. ~~**M6 (sync):** wire the outbox to NATS/JetStream.~~ ✅ core done & verified (relay →
+   JetStream → idempotent durable hub + offline replay).
+11b. **Next:** **M7** (Guardian Portal & Mobile — child-scoped read API); finish M6
+   (HLC-merge for mutable rows, mTLS, cloud→node push-down, DR drill); the platform SPA;
+   or academics/finance config + FE.
 9. **DoD backfill:** frozen OpenAPI spec files (`/auth/*`, `/access/*`, `/students/*`) +
    automated DB integration tests (RLS isolation, golden-rule atomicity); Redis cache for
    effective permissions; document upload (MinIO) + onboarding wizard/approval states.

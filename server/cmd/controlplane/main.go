@@ -14,6 +14,8 @@ import (
 	"github.com/weloin/ved/internal/features/health"
 	"github.com/weloin/ved/internal/features/platform"
 	"github.com/weloin/ved/internal/features/registration"
+	"github.com/weloin/ved/internal/features/synchub"
+	"github.com/weloin/ved/internal/platform/bus"
 	"github.com/weloin/ved/internal/platform/config"
 	"github.com/weloin/ved/internal/platform/db"
 	"github.com/weloin/ved/internal/platform/httpx"
@@ -59,6 +61,19 @@ func main() {
 		}
 		if err := platform.SeedPlans(ctx, platRepo); err != nil {
 			slog.Error("seed plans", "err", err)
+		}
+	}
+
+	// Sync hub (M6): consume every tenant's events from JetStream into the durable cloud
+	// history (idempotent). Tolerant of NATS being down.
+	if b, err := bus.Connect(cfg.NATSURL); err != nil {
+		slog.Warn("sync hub disabled: nats connect failed", "err", err)
+	} else {
+		defer b.Close()
+		if _, err := synchub.Start(ctx, b, pool); err != nil {
+			slog.Error("sync hub start", "err", err)
+		} else {
+			slog.Info("sync hub started", "nats", cfg.NATSURL)
 		}
 	}
 
