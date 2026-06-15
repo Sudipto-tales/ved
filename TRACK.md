@@ -5,7 +5,27 @@ The single place that records **how far the build has progressed** against the p
 
 **Legend:** ✅ done · 🟡 scaffolded / partial · ⬜ not started
 
-> **YOU ARE HERE:** M5 (Teachers & Staff) **complete and verified** — the "bridges-first,
+> **YOU ARE HERE:** M5 **complete and verified** — all four replication slices done
+> (teachers, staff, **academics**, **finance**). The design care point — **append-only
+> ledgers** — is proven end to end. Academics adds the structure (program → stage →
+> subject → section → enrollment + exam) plus the two append-only ledgers
+> **attendance_event** and **mark_entry**; finance adds the **append-only, event-sourced
+> ledger** (fee_head → invoice/DEBIT → payment/CREDIT with **gapless receipts** →
+> **derived outstanding** Σ DEBIT−Σ CREDIT → **reversal** void). **DB triggers** block
+> UPDATE/DELETE on every append-only table (defence at the database). A minimal
+> `academic_year` (tenant-setup subset) is seeded for dev. Verified live: attendance
+> re-mark keeps all 3 rows, latest-by-hlc wins, summary summed (PRESENT 2/2); mark
+> re-grade → effective 45; invoice 5000 → outstanding 5000 → pay 5000 → 0 → void 2000 →
+> 2000 (payment row preserved); receipts RCT-00001/00002 gapless; `UPDATE ledger_entry`
+> and `DELETE attendance_event` rejected by trigger; no-token 401; RLS foreign-tenant 0.
+> FE: finance **student-ledger** screens (issue charge / record payment / void / derived
+> outstanding), `tsc -b` + `vite build` clean (academics setup/attendance UI deferred).
+> Next: the platform SPA (M4), or **M6 (sync)** — the outbox is already populated by every
+> slice, so sync is wiring. _DoD carried forward: OpenAPI specs; automated DB-integration
+> tests; fee structures/schedules/concessions/fines, COURSE_BASED mode, timetable; full
+> tenant-setup slice; academics FE._
+
+> **(prev) M5 (Teachers & Staff)** — the "bridges-first,
 > then replicate" payoff. The shared people machinery is now a kernel **onboarding engine**
 > (`internal/platform/onboarding`): handle generation + temp password + user + membership
 > + roles in one tenant tx, plus the aggregate event/audit writer. `students` was
@@ -97,7 +117,7 @@ The single place that records **how far the build has progressed** against the p
 | **M2** RBAC | permission catalog, roles, `requirePermission`, provisioning bootstrap | ✅ verified (catalog seed + default roles + real `requirePermission` + FE real perms) |
 | **M3** Onboarding + Students | credential gen, onboarding engine, first real domain slice | ✅ verified (student.onboard tx + credential gen + roster/detail; notes retired) |
 | **M4** Control Plane | registration state machine, payment-proof, licensing | ✅ backend verified (register→approve→provision→license + cross-plane handoff); platform SPA deferred |
-| **M5** Teachers/Staff/Academics/Finance | replicate the M3 shape across slices | 🟡 teachers + staff ✅ verified (shared onboarding engine); academics/finance ⬜ |
+| **M5** Teachers/Staff/Academics/Finance | replicate the M3 shape across slices | ✅ verified (teachers, staff, academics, finance; append-only ledgers DB-enforced) |
 | **M6** Sync & Offline | NATS relay + inbox + HLC; wiring, not rewrite | ⬜ |
 | **M7** Guardian Portal & Mobile | child-scoped read API; Expo read-heavy | ⬜ |
 | **M8** LMS | content → assignments → submission/grading | ⬜ |
@@ -248,8 +268,33 @@ audit); handles `alanturing.teacher@ved.com` / `gracehopper.employee@ved.com` (c
 suffixes); membership user_type TEACHER/EMPLOYEE; duplicate employee_code 409; rosters +
 detail 200; **students still pass after the refactor**; no-token 401; RLS on `teacher` as
 `ved_app` (own 1, foreign 0).
-**Carried-forward:** academics + finance slices; person_document upload (MinIO); onboarding
-wizard/approval states; OpenAPI specs; DB-integration tests.
+**Carried-forward:** person_document upload (MinIO); onboarding wizard/approval states;
+OpenAPI specs; DB-integration tests.
+
+## Backend — `server/` (M5 Academics & Finance) — ✅ verified
+
+The append-only ledgers — the milestone's one new design care point. Corrections insert
+NEW rows (latest by hlc wins); counts/balances are SUMMED on read, never stored; **DB
+triggers** (`forbid_mutation()`) reject UPDATE/DELETE so immutability holds at the
+database, not just the repo.
+
+| Component | File(s) | Status |
+|---|---|---|
+| Academics migration (+ minimal `academic_year`): program/stage/subject/curriculum/section/enrollment/teaching_assignment/exam + **attendance_event** & **mark_entry** (append-only) + `forbid_mutation()` triggers | `db/migrations/00007_academics.sql` | ✅ applied |
+| Finance migration: fee_head + **invoice/invoice_line** + **payment** (gapless) + **ledger_entry** (append-only) + counter + immutability triggers | `db/migrations/00008_finance.sql` | ✅ applied |
+| `academics` slice: structure setup; `attendance.mark` + `marks.enter` (append-only, golden rule); derived reads (latest-by-hlc, summed summary) | `internal/features/academics/` | ✅ |
+| `finance` slice: fee-heads; invoice (DEBIT); payment (CREDIT, gapless, flow B); void (REVERSAL); **derived** outstanding (Σ DEBIT−Σ CREDIT) | `internal/features/finance/finance.go` | ✅ |
+| Shared `onboarding.Engine` reused for tenant tx + outbox/audit by both | `internal/platform/onboarding/` | ✅ |
+| Dev `academic_year` seed; node wiring | `internal/features/academics/provisioning.go`, `cmd/node/main.go` | ✅ |
+| Frontend: finance student-ledger (issue/pay/void/derived outstanding) | `web/src/features/finance/` | ✅ |
+
+**Live verification:** attendance re-mark keeps all 3 rows, latest-by-hlc effective,
+summary summed (PRESENT 2/2); mark re-grade → effective 45; invoice 5000 → outstanding
+5000 → pay 5000 → 0 → void → 2000 (payment preserved); receipts RCT-00001/00002 gapless;
+`UPDATE ledger_entry` + `DELETE attendance_event` rejected by trigger; no-token 401; RLS
+foreign-tenant 0.
+**Carried-forward:** academics setup/attendance FE; fee structures/schedules/concessions/
+fines; COURSE_BASED mode; timetable; full tenant-setup slice (terms, rooms, dropdowns).
 
 ## Frontend — `web/` (M0) — 🟡 architecture scaffolded
 
@@ -285,8 +330,8 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
 | staff | ADMIN/STAFF | mgmt (roster/onboard/detail) | ✅ (mgmt done) |
 | onboarding | STAFF/ADMIN | wizard, approvals | ⬜ |
 | guardians | GUARDIAN | portal (multi-child, fees, …) | ⬜ |
-| academics | ADMIN | programs…timetable | ⬜ |
-| finance | ADMIN/STAFF | fees, ledger, audit | ⬜ |
+| academics | ADMIN | programs…timetable | 🟡 backend done (structure + append-only attendance/marks); FE planned |
+| finance | ADMIN/STAFF | fees, ledger, audit | 🟡 backend done (append-only ledger); FE student-ledger done |
 | access | ADMIN | roles, user-roles built; designations/maker-checker planned | 🟡 (roles + user-roles done) |
 | admin | ADMIN | tenant settings | ⬜ |
 | communication | ADMIN | notices, notifications | ⬜ |
@@ -323,9 +368,12 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
    SPA (`web/platform/`) + MinIO payment-proof upload + control-plane audit log.
 8b. ~~**M5 (replicate):** clone the M3 shape for `teachers`/`staff`.~~ ✅ done & verified
    via a shared kernel **onboarding engine** (students refactored onto it too).
-9b. **Next:** `academics`/`finance` (the remaining M5 slices — append-only ledgers/marks/
-   attendance, the only design care points); the platform SPA (`web/platform/`); or **M6**
-   (sync — wiring the outbox to NATS/JetStream, since every write already routes through it).
+9b. ~~**Next:** `academics`/`finance` (append-only ledgers/marks/attendance).~~ ✅ done &
+   verified — M5 complete (all four slices; DB-enforced append-only immutability).
+10b. **Next:** the platform SPA (`web/platform/`, M4's deferred FE); **M6 (sync)** — wiring
+   the outbox to NATS/JetStream (every write already routes through the outbox, so it's
+   plumbing not a rewrite); or fill out academics/finance config + FE (fee structures,
+   timetable, attendance UI, full tenant-setup).
 9. **DoD backfill:** frozen OpenAPI spec files (`/auth/*`, `/access/*`, `/students/*`) +
    automated DB integration tests (RLS isolation, golden-rule atomicity); Redis cache for
    effective permissions; document upload (MinIO) + onboarding wizard/approval states.

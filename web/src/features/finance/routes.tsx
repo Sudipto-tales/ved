@@ -86,8 +86,9 @@ export const financePages: PageDef[] = [
     persona: 'STAFF',
     permission: 'fee.manage',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/LedgerIndexPage'),
   },
   {
     path: 'ledger/:studentId',
@@ -95,7 +96,8 @@ export const financePages: PageDef[] = [
     persona: 'STAFF',
     permission: 'fee.manage',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
+    element: () => import('./pages/StudentLedgerPage'),
   },
   {
     path: 'dues',

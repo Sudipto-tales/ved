@@ -10,7 +10,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/weloin/ved/internal/features/academics"
 	"github.com/weloin/ved/internal/features/access"
+	"github.com/weloin/ved/internal/features/finance"
 	"github.com/weloin/ved/internal/features/health"
 	"github.com/weloin/ved/internal/features/identity"
 	"github.com/weloin/ved/internal/features/staff"
@@ -22,6 +24,7 @@ import (
 	"github.com/weloin/ved/internal/platform/db"
 	"github.com/weloin/ved/internal/platform/httpx"
 	"github.com/weloin/ved/internal/platform/migrate"
+	"github.com/weloin/ved/internal/platform/onboarding"
 )
 
 func main() {
@@ -76,6 +79,10 @@ func main() {
 		if err := students.SeedTenantProfile(ctx, studentsRepo, devTenant, "ved", "VED Demo School"); err != nil {
 			slog.Error("seed tenant profile", "err", err)
 		}
+		// Minimal current academic year so sections/exams work out of the box (M5).
+		if err := academics.SeedDevAcademicYear(ctx, onboarding.NewEngine(pool, nodeID), devTenant); err != nil {
+			slog.Error("seed academic year", "err", err)
+		}
 	}
 
 	r := httpx.NewRouter("node")
@@ -99,6 +106,8 @@ func main() {
 		students.Register(g, pool, nodeID, resolver)
 		teachers.Register(g, pool, nodeID, resolver)
 		staff.Register(g, pool, nodeID, resolver)
+		academics.Register(g, pool, nodeID, resolver)
+		finance.Register(g, pool, nodeID, resolver)
 	})
 
 	if err := httpx.Serve(cfg.HTTPAddr, r); err != nil {
