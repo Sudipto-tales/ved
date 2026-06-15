@@ -1,10 +1,12 @@
 // Tenant-context middleware — the seam that arms RLS (plan/bridges.md §3).
 //
-// The client names its active tenant in `X-Tenant-ID` (chosen from the tenant
-// picker). At M1 this is now AUTHORISED: the tenant must be one of the
-// authenticated user's memberships, so a caller cannot point at a tenant they don't
-// belong to. Downstream code reads the tenant ONLY from the request context — no
-// slice passes tenant_id by hand.
+// The active tenant is named one of two ways, in priority order:
+//  1. X-Tenant-Slug — set by the subdomain gateway (lincoln.ved.com) and resolved to a
+//     tenant_id via the injected SlugResolver (docs/25-subdomain-routing.md).
+//  2. X-Tenant-ID — an explicit uuid, for API clients / tests / bare-localhost dev.
+//
+// Either way it is AUTHORISED: the chosen tenant must be one of the authenticated user's
+// memberships, else 403. Downstream code reads the tenant ONLY from the request context.
 package httpx
 
 import (
@@ -18,29 +20,44 @@ type ctxKey int
 
 const tenantKey ctxKey = iota
 
-// TenantContext extracts the active tenant, verifies it against the caller's
-// memberships (when an Identity is present), and stores it on the request context.
-// Requests to tenant-scoped routes without a valid, authorised tenant are rejected.
-func TenantContext(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		raw := r.Header.Get("X-Tenant-ID")
-		if raw == "" {
-			Error(w, http.StatusBadRequest, "missing X-Tenant-ID")
-			return
+// SlugResolver maps a tenant slug to its tenant_id (false if unknown). Supplied by the
+// node, which looks it up via the tenant_id_by_slug SECURITY DEFINER function.
+type SlugResolver func(ctx context.Context, slug string) (uuid.UUID, bool)
+
+// TenantContext returns the tenant-context middleware. `resolve` may be nil (then only
+// X-Tenant-ID is honoured — e.g. the control plane / dev without subdomains).
+func TenantContext(resolve SlugResolver) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			id, ok := resolveTenant(r, resolve)
+			if !ok {
+				Error(w, http.StatusBadRequest, "missing or unknown tenant (X-Tenant-Slug / X-Tenant-ID)")
+				return
+			}
+			// When authenticated, the chosen tenant must be one the user belongs to.
+			if ident, authed := IdentityFrom(r.Context()); authed && !ident.belongsTo(id) {
+				Error(w, http.StatusForbidden, "not a member of this tenant")
+				return
+			}
+			ctx := context.WithValue(r.Context(), tenantKey, id)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+func resolveTenant(r *http.Request, resolve SlugResolver) (uuid.UUID, bool) {
+	if slug := r.Header.Get("X-Tenant-Slug"); slug != "" && resolve != nil {
+		if id, ok := resolve(r.Context(), slug); ok {
+			return id, true
 		}
-		id, err := uuid.Parse(raw)
-		if err != nil {
-			Error(w, http.StatusBadRequest, "invalid X-Tenant-ID")
-			return
+		return uuid.Nil, false
+	}
+	if raw := r.Header.Get("X-Tenant-ID"); raw != "" {
+		if id, err := uuid.Parse(raw); err == nil {
+			return id, true
 		}
-		// When authenticated, the chosen tenant must be one the user belongs to.
-		if ident, ok := IdentityFrom(r.Context()); ok && !ident.belongsTo(id) {
-			Error(w, http.StatusForbidden, "not a member of this tenant")
-			return
-		}
-		ctx := context.WithValue(r.Context(), tenantKey, id)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+	}
+	return uuid.Nil, false
 }
 
 // belongsTo reports whether the identity holds a membership in the given tenant.

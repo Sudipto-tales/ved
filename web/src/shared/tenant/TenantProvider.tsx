@@ -1,12 +1,19 @@
-// Tenant seam (plan/bridges.md §3). Holds the active tenant id, which the API client
-// sends as X-Tenant-ID on every request to arm server-side RLS. At M1 the active
-// tenant is resolved from the user's memberships (with a picker when there are
-// several); at M0 it's chosen on the skeleton login screen.
+// Tenant seam (plan/bridges.md §3, docs/25). The active tenant is determined two ways:
+//  - Subdomain ({slug}.ved.*): the slug IS the tenant; the API client sends X-Tenant-Slug
+//    and the picker is skipped.
+//  - Bare host (localhost): the user picks a tenant; we store its id and send X-Tenant-ID.
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { STORAGE } from '@/shared/lib/storage';
+import { hostTenant } from '@/shared/tenant/host';
 
 interface TenantState {
   activeTenantId: string | null;
+  /** Tenant slug from the subdomain ({slug}.ved.*), or null on a bare host. */
+  tenantSlug: string | null;
+  /** True when this host is an admin entry ({slug}-admin.ved.*). */
+  isAdminHost: boolean;
+  /** Whether a tenant context exists (subdomain slug OR a picked id). */
+  hasTenant: boolean;
   setTenant: (id: string) => void;
   clearTenant: () => void;
 }
@@ -14,6 +21,7 @@ interface TenantState {
 const TenantContext = createContext<TenantState | null>(null);
 
 export function TenantProvider({ children }: { children: ReactNode }) {
+  const host = hostTenant(); // stable for the page's lifetime
   const [activeTenantId, setActiveTenantId] = useState<string | null>(
     () => localStorage.getItem(STORAGE.tenant),
   );
@@ -29,8 +37,15 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<TenantState>(
-    () => ({ activeTenantId, setTenant, clearTenant }),
-    [activeTenantId, setTenant, clearTenant],
+    () => ({
+      activeTenantId,
+      tenantSlug: host?.slug ?? null,
+      isAdminHost: host?.admin ?? false,
+      hasTenant: !!host || !!activeTenantId,
+      setTenant,
+      clearTenant,
+    }),
+    [activeTenantId, host, setTenant, clearTenant],
   );
 
   return <TenantContext.Provider value={value}>{children}</TenantContext.Provider>;

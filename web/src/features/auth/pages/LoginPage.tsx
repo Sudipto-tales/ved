@@ -3,6 +3,7 @@
 import { useState, type FormEvent } from 'react';
 import { Button } from '@/shared/ui';
 import { useAuth } from '@/shared/auth/AuthProvider';
+import { useTenant } from '@/shared/tenant/TenantProvider';
 import { ApiError } from '@/shared/api/client';
 import { login as loginRequest } from '../api/authApi';
 import { useAuthFlow } from '../useAuthFlow';
@@ -14,6 +15,7 @@ const DEV_PASSWORD = import.meta.env.VITE_DEV_PASSWORD ?? 'admin1234';
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const { tenantSlug, isAdminHost } = useTenant();
   const continueAfterAuth = useAuthFlow();
   const [identifier, setIdentifier] = useState(DEV_LOGIN);
   const [password, setPassword] = useState(DEV_PASSWORD);
@@ -46,9 +48,11 @@ export default function LoginPage() {
 
   return (
     <form onSubmit={onSubmit}>
-      <h2 style={{ fontSize: 18 }}>Sign in</h2>
+      <h2 style={{ fontSize: 18 }}>{isAdminHost ? 'Admin sign in' : 'Sign in'}</h2>
       <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>
-        Welcome back. Enter your VED credentials to continue.
+        {tenantSlug
+          ? <>Signing in to <strong style={{ color: 'var(--text)' }}>{tenantSlug}</strong>{isAdminHost ? ' (admin)' : ''}.</>
+          : 'Welcome back. Enter your VED credentials to continue.'}
       </p>
 
       <div className="mt-16">

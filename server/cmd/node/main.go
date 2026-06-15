@@ -121,11 +121,21 @@ func main() {
 		identity.RegisterMe(g, identSvc)
 	})
 
+	// Resolve a subdomain slug (X-Tenant-Slug, e.g. lincoln.ved.com) to its tenant_id via
+	// the SECURITY DEFINER function (docs/25). Runs as ved_app; the function bypasses RLS.
+	slugResolver := func(ctx context.Context, slug string) (uuid.UUID, bool) {
+		var id *uuid.UUID
+		if err := pool.QueryRow(ctx, "SELECT tenant_id_by_slug($1)", slug).Scan(&id); err != nil || id == nil {
+			return uuid.Nil, false
+		}
+		return *id, true
+	}
+
 	// Authenticated AND tenant-scoped (RLS armed): real domain slices. Each slice route
 	// adds its own authz.Require(...) gate (M2 RBAC).
 	r.Group(func(g chi.Router) {
 		g.Use(httpx.Authenticator(jwtMgr))
-		g.Use(httpx.TenantContext)
+		g.Use(httpx.TenantContext(slugResolver))
 		access.Register(g, pool, nodeID, resolver)
 		students.Register(g, pool, nodeID, resolver)
 		teachers.Register(g, pool, nodeID, resolver)

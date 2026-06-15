@@ -131,6 +131,36 @@ services:
     depends_on:
       - node
 
+  # Platform SPA dev server (same image as web; runs the platform Vite config).
+  platform-web:
+    profiles: ["app"]
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["npm", "run", "dev:platform", "--", "--host", "0.0.0.0"]
+    expose:
+      - "5174" # internal only; nginx fronts it at platform.ved.test
+    depends_on:
+      - controlplane
+
+  # Subdomain gateway (docs/25): {slug}.ved.test → tenant SPA + node (same-origin /api,
+  # X-Tenant-Slug from the host); platform.ved.test → platform SPA + control plane.
+  # Reach it via dnsmasq (*.ved.test → 127.0.0.1) or /etc/hosts entries.
+  nginx:
+    profiles: ["app"]
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    volumes:
+      - ./deploy/nginx/ved.test.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "${GATEWAY_PORT:-80}:80"
+    depends_on:
+      - web
+      - platform-web
+      - node
+      - controlplane
+
 volumes:
   pgdata:
   redisdata:

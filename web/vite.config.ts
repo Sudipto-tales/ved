@@ -10,5 +10,6 @@ export default defineConfig({
   server: {
     host: '0.0.0.0', // reachable from outside the container
     port: 5173,
+    allowedHosts: ['.ved.test', '.ved.com'], // accept tenant subdomains behind nginx (docs/25)
   },
 });

@@ -10,13 +10,19 @@ import { useTenant } from '@/shared/tenant/TenantProvider';
 export function useAuthFlow() {
   const navigate = useNavigate();
   const { mustReset } = useAuth();
-  const { setTenant } = useTenant();
+  const { setTenant, tenantSlug } = useTenant();
 
   // Call after a session is stored. Honours the forced-reset gate first.
   return useCallback(
     (memberships: Membership[], freshMustReset?: boolean) => {
       if (freshMustReset ?? mustReset) {
         navigate('/reset-password', { replace: true });
+        return;
+      }
+      // Subdomain mode ({slug}.ved.*): the tenant is implied by the host — no picker.
+      // The backend authorises the membership; an unlinked user gets "no access".
+      if (tenantSlug) {
+        navigate(memberships.length === 0 ? '/no-access' : '/', { replace: true });
         return;
       }
       if (memberships.length === 1) {
@@ -30,6 +36,6 @@ export function useAuthFlow() {
       }
       navigate('/select-tenant', { replace: true });
     },
-    [navigate, setTenant, mustReset],
+    [navigate, setTenant, mustReset, tenantSlug],
   );
 }

@@ -4,6 +4,6 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { useTenant } from '@/shared/tenant/TenantProvider';
 
 export function TenantGuard() {
-  const { activeTenantId } = useTenant();
-  return activeTenantId ? <Outlet /> : <Navigate to="/login" replace />;
+  const { hasTenant } = useTenant();
+  return hasTenant ? <Outlet /> : <Navigate to="/login" replace />;
 }

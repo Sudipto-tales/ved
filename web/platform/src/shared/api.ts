@@ -1,6 +1,10 @@
 // The platform SPA's API client — talks to the CONTROL PLANE binary (port 8080), a
 // different origin and a SEPARATE token namespace from the tenant app (docs/02, docs/05).
-const BASE = import.meta.env.VITE_PLATFORM_API_URL ?? 'http://localhost:8080';
+// Same-origin (relative) behind nginx on a VED host (platform.ved.*); the dev default
+// (control plane :8080) on a bare host. (docs/25-subdomain-routing.md)
+const onVedHost =
+  typeof location !== 'undefined' && /(^|\.)ved\.(test|com)$/.test(location.hostname);
+const BASE = onVedHost ? '' : (import.meta.env.VITE_PLATFORM_API_URL ?? 'http://localhost:8080');
 
 export const PLATFORM_TOKEN_KEY = 'ved.platform.token';
 

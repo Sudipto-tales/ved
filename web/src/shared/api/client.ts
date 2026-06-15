@@ -4,8 +4,11 @@
 //
 // At M0 this is a thin typed fetch wrapper. When the OpenAPI spec stabilises, the
 // generated client drops in here behind the same `api` surface.
-import { env } from '@/shared/config/env';
+//
+// Tenant context: on a {slug}.ved.* host we send X-Tenant-Slug (the subdomain) and call a
+// same-origin /api (no CORS); on bare localhost we keep the legacy X-Tenant-ID + dev base.
 import { STORAGE } from '@/shared/lib/storage';
+import { apiBase, hostTenant } from '@/shared/tenant/host';
 
 export class ApiError extends Error {
   constructor(
@@ -23,10 +26,16 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const token = localStorage.getItem(STORAGE.token);
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const tenant = localStorage.getItem(STORAGE.tenant);
-  if (tenant) headers['X-Tenant-ID'] = tenant;
+  // Subdomain host → tenant by slug; otherwise the explicit id chosen via the picker.
+  const host = hostTenant();
+  if (host) {
+    headers['X-Tenant-Slug'] = host.slug;
+  } else {
+    const tenant = localStorage.getItem(STORAGE.tenant);
+    if (tenant) headers['X-Tenant-ID'] = tenant;
+  }
 
-  const res = await fetch(`${env.apiUrl}${path}`, {
+  const res = await fetch(`${apiBase()}${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,

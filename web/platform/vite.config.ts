@@ -12,5 +12,5 @@ export default defineConfig({
     alias: { '@': path.resolve(__dirname, '../src') }, // reuse tenant shared kernel (ui, types)
   },
   build: { outDir: path.resolve(__dirname, 'dist') },
-  server: { host: '0.0.0.0', port: 5174 },
+  server: { host: '0.0.0.0', port: 5174, allowedHosts: ['.ved.test', '.ved.com'] },
 });
