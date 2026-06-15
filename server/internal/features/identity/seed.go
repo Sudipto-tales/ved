@@ -41,21 +41,32 @@ func (r *Repo) withTenant(ctx context.Context, tenantID uuid.UUID, fn func(pgx.T
 	return tx.Commit(ctx)
 }
 
-// SeedDevAdmin idempotently creates the demo tenant's admin user + membership. The
-// tenant-scoped membership write follows the GOLDEN RULE: row + outbox + audit in one
-// transaction. Safe to call on every startup.
-func SeedDevAdmin(ctx context.Context, repo *Repo) error {
-	if _, err := repo.userByLogin(ctx, DevAdminLogin); err == nil {
-		slog.Info("dev seed: admin already present", "login", DevAdminLogin, "tenant", DevTenantID)
-		return nil
+// SeedDevAdmin idempotently creates the demo tenant's admin user + membership and
+// returns the admin's membership id (used by the M2 RBAC bootstrap to attach the School
+// Admin role). The tenant-scoped membership write follows the GOLDEN RULE: row + outbox
+// + audit in one transaction. Safe to call on every startup.
+func SeedDevAdmin(ctx context.Context, repo *Repo) (uuid.UUID, error) {
+	tenantID := uuid.MustParse(DevTenantID)
+
+	if existing, err := repo.userByLogin(ctx, DevAdminLogin); err == nil {
+		ms, mErr := repo.memberships(ctx, existing.ID)
+		if mErr != nil {
+			return uuid.Nil, fmt.Errorf("resolve admin membership: %w", mErr)
+		}
+		for _, m := range ms {
+			if m.TenantID == tenantID {
+				slog.Info("dev seed: admin already present", "login", DevAdminLogin, "tenant", DevTenantID)
+				return m.MembershipID, nil
+			}
+		}
+		return uuid.Nil, fmt.Errorf("dev admin exists but has no membership in tenant %s", DevTenantID)
 	} else if !errors.Is(err, ErrInvalidCredentials) {
-		return fmt.Errorf("check existing admin: %w", err)
+		return uuid.Nil, fmt.Errorf("check existing admin: %w", err)
 	}
 
-	tenantID := uuid.MustParse(DevTenantID)
 	hash, err := crypto.HashPassword(DevAdminPass)
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 	userID := uuid.Must(uuid.NewV7())
 	membershipID := uuid.Must(uuid.NewV7())
@@ -97,8 +108,8 @@ func SeedDevAdmin(ctx context.Context, repo *Repo) error {
 		return nil
 	})
 	if err != nil {
-		return err
+		return uuid.Nil, err
 	}
 	slog.Info("dev seed: created admin", "login", DevAdminLogin, "password", DevAdminPass, "tenant", DevTenantID)
-	return nil
+	return membershipID, nil
 }

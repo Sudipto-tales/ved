@@ -5,20 +5,26 @@ The single place that records **how far the build has progressed** against the p
 
 **Legend:** ✅ done · 🟡 scaffolded / partial · ⬜ not started
 
-> **YOU ARE HERE:** M1 **complete and verified**. Real JWT login is live: `/auth/login`
-> verifies argon2id credentials, resolves the user's memberships (global `users` +
-> tenant-scoped `memberships`, RLS), and mints access+refresh tokens. The auth
-> middleware is now production (Bearer JWT → `{user_id, memberships}`), and
-> tenant-context is **authorised** (the chosen `X-Tenant-ID` must be one of the
-> caller's memberships → 403 otherwise). Verified end-to-end on the deployed stack:
-> login 200, wrong-password 401, no-token 401, foreign-tenant 403, note round-trip
-> 201/200; golden rule on the seeded membership (1 row ⇒ 1 outbox ⇒ 1 audit); RLS as
-> `ved_app` (foreign tenant 0 rows, own tenant 1). Frontend: real login + tenant
-> picker + forced-reset flow, `tsc`/build clean. **Plus** a contextual help system
-> (`/help` + per-page `?` icons). Next: **M2** (RBAC — `requirePermission` backed by
-> data). _DoD gaps carried forward: a formal OpenAPI spec file + automated DB
-> integration tests (RLS/golden-rule currently proven live, plus crypto/JWT unit
-> tests)._
+> **YOU ARE HERE:** M2 (RBAC) **complete and verified**. The `requirePermission` gate is
+> real and backed by data: a code-defined permission catalog (31 keys) is seeded at
+> startup into the global `permissions` table; tenant provisioning seeds default system
+> roles (School Admin, Admission Officer, Class Teacher, Accountant, Student) + their
+> `role_permissions` and attaches the first admin to **School Admin** (`tenant.admin`).
+> The `access` slice ships roles CRUD, designations, and membership-role assignment —
+> every mutation row + outbox + audit in one tx, behind `authz.Require(...)`.
+> `tenant.admin` short-circuits to "all within this tenant". Verified end-to-end on the
+> deployed stack: admin login 200 → `/me/permissions` = 31 (tenant.admin expansion);
+> role create 201 with golden rule (1 row ⇒ 1 outbox ⇒ 1 audit, +1 role_permissions);
+> system-role delete 409; **role-less member 403 with `missing permission: role.manage`
+> and empty `/me/permissions`**; foreign-tenant 403, no-token 401; RLS on `roles` as
+> `ved_app` (own tenant 6, foreign 0). Frontend: AuthProvider now loads **real**
+> per-tenant permissions from `/me/permissions` (the M1 `['*']` wildcard is gone),
+> `PermissionGuard` waits for them, and the `access/roles` + `access/user-roles` screens
+> are built; `tsc -b` + `vite build` clean. Next: **M3** (Onboarding + Students — first
+> real domain slice; the `notes` demo retires there). _DoD gaps carried forward: a
+> formal OpenAPI spec file + automated DB integration tests (RLS/golden-rule proven live
+> via curl+psql; gate logic has unit tests); Redis caching of effective permissions is a
+> planned optimization (currently resolved per-request from the DB)._
 
 ---
 
@@ -28,7 +34,7 @@ The single place that records **how far the build has progressed** against the p
 |---|---|---|
 | **M0** Foundations & walking skeleton | repo layout, migration+RLS, middleware chain, one slice end-to-end, FE shell | ✅ verified (skeleton + RLS enforcing) |
 | **M1** Identity & Tenancy | real `users`/`memberships`, JWT login, tenant resolve | ✅ verified (argon2id + JWT + memberships + RLS-authorised tenant) |
-| **M2** RBAC | permission catalog, roles, `requirePermission`, provisioning bootstrap | ⬜ |
+| **M2** RBAC | permission catalog, roles, `requirePermission`, provisioning bootstrap | ✅ verified (catalog seed + default roles + real `requirePermission` + FE real perms) |
 | **M3** Onboarding + Students | credential gen, onboarding engine, first real domain slice | ⬜ |
 | **M4** Control Plane | registration state machine, payment-proof, licensing | ⬜ |
 | **M5** Teachers/Staff/Academics/Finance | replicate the M3 shape across slices | ⬜ |
@@ -98,6 +104,25 @@ rather than relying on a superuser's `SET ROLE`.)
 **Carried-forward DoD:** formal OpenAPI spec file + automated DB-integration tests
 (RLS/golden-rule proven live via curl+psql for now).
 
+## Backend — `server/` (M2 RBAC) — ✅ verified
+
+| Component | File(s) | Status |
+|---|---|---|
+| Migration `permissions`(global) + `designations`/`roles`/`role_permissions`/`membership_roles` (tenant-scoped + RLS) + `memberships.designation_id` FK | `db/migrations/00004_rbac.sql` | ✅ applied |
+| Code-defined permission catalog (31 keys) + default-role template | `internal/platform/authz/catalog.go` | ✅ |
+| Effective-permission resolver (roles → permissions, RLS) | `internal/platform/authz/resolver.go` | ✅ |
+| `requirePermission` gate (`authz.Require`, tenant.admin short-circuit) | `internal/platform/authz/middleware.go` | ✅ + unit tests |
+| `access` slice: roles CRUD, designations, member-role assignment, `/me/permissions` | `internal/features/access/access.go` | ✅ golden rule per mutation |
+| Catalog seed + tenant provisioning bootstrap (default roles + attach admin) | `internal/features/access/provisioning.go` | ✅ idempotent |
+| Node wiring (seed catalog, bootstrap dev tenant, mount gated slice) | `cmd/node/main.go` | ✅ |
+
+**Live verification:** admin `/me/permissions` = 31 (tenant.admin → full catalog); role
+create 201 with 1 row ⇒ 1 outbox ⇒ 1 audit (+1 role_permissions); system-role delete
+409; role-less member → 403 `missing permission: role.manage` + empty `/me/permissions`;
+foreign-tenant 403; no-token 401; RLS on `roles` as `ved_app` (own 6, foreign 0).
+**Carried-forward:** Redis cache of effective perms (currently per-request DB resolve);
+OpenAPI spec file; automated DB-integration tests.
+
 ## Frontend — `web/` (M0) — 🟡 architecture scaffolded
 
 | Component | File(s) | Status |
@@ -134,7 +159,7 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
 | guardians | GUARDIAN | portal (multi-child, fees, …) | ⬜ |
 | academics | ADMIN | programs…timetable | ⬜ |
 | finance | ADMIN/STAFF | fees, ledger, audit | ⬜ |
-| access | ADMIN | roles, designations | ⬜ |
+| access | ADMIN | roles, user-roles built; designations/maker-checker planned | 🟡 (roles + user-roles done) |
 | admin | ADMIN | tenant settings | ⬜ |
 | communication | ADMIN | notices, notifications | ⬜ |
 | reports | ADMIN | dashboards, exports, backup | ⬜ |
@@ -153,12 +178,18 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
 5. ~~**Begin M1:** replace the auth + tenant stubs with real `users`/`memberships` + JWT~~
    ✅ done & verified (argon2id login, JWT, memberships, RLS-authorised tenant, dev seed,
    FE login/tenant-picker/forced-reset).
-6. **Begin M2 (RBAC):** `roles`/`permissions`/`role_permissions`/`membership_roles`,
+6. ~~**Begin M2 (RBAC):** `roles`/`permissions`/`role_permissions`/`membership_roles`,
    code-defined permission catalog seeded at provisioning, real `requirePermission(...)`
-   (the dev wildcard `['*']` in the FE auth provider flips to real perms here). Then M3
-   (Students) — at which point the `notes` demo slice is retired.
-7. **DoD backfill:** add a frozen OpenAPI spec file for `/auth/*` + automated DB
-   integration tests (RLS isolation, golden-rule atomicity).
+   (the dev wildcard `['*']` in the FE auth provider flips to real perms here).~~ ✅ done
+   & verified (catalog seed, default roles, `authz.Require`, FE real perms via
+   `/me/permissions`).
+7. **Begin M3 (Onboarding + Students):** credential/email generator + config-driven
+   onboarding engine in the kernel, `student`/`guardian` tables, `student.onboard` in one
+   tx (users + memberships + profile + guardian links + outbox + audit), gated by
+   `requirePermission("student.onboard")`. The `notes` demo slice retires here.
+8. **DoD backfill:** frozen OpenAPI spec files (`/auth/*`, `/access/*`) + automated DB
+   integration tests (RLS isolation, golden-rule atomicity); Redis cache for effective
+   permissions.
 
 ## Definition of done per slice
 

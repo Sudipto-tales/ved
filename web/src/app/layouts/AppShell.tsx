@@ -5,6 +5,7 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 import { protectedPages } from '@/app/pages';
 import type { Persona } from '@/shared/types/page';
 import { useAuth } from '@/shared/auth/AuthProvider';
+import { useSyncPermissions } from '@/shared/auth/useSyncPermissions';
 import { useTenant } from '@/shared/tenant/TenantProvider';
 import { Can } from '@/shared/authz/Can';
 import { Icon, type IconName } from '@/shared/ui';
@@ -32,6 +33,7 @@ const iconFor = (path: string): IconName => ICONS[path.split('/')[0]] ?? 'grid';
 export function AppShell() {
   const { logout } = useAuth();
   const { activeTenantId, clearTenant } = useTenant();
+  useSyncPermissions(); // load effective permissions for the active tenant (M2)
   const loc = useLocation();
   const navPages = protectedPages.filter((p) => p.nav);
 

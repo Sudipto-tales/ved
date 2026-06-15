@@ -1,8 +1,9 @@
-// Auth seam (plan/bridges.md §2). Holds the session (access + refresh tokens, the
-// user's memberships, the must-reset flag) and the effective permission set, and
-// exposes login/logout. M1 wires real JWT issuance: `login` stores what the backend
-// /auth/login returned. Permissions stay wildcard until RBAC lands (M2), so the
-// cosmetic <Can> gate shows everything for now — the server is authoritative.
+// Auth seam (plan/bridges.md §2, §4). Holds the session (access + refresh tokens, the
+// user's memberships, the must-reset flag) and the EFFECTIVE permission set for the
+// active tenant. M2: permissions are real — resolved server-side from the membership's
+// roles via GET /api/v1/me/permissions and loaded once a tenant is active (the dev
+// wildcard from M1 is gone). The cosmetic <Can> gate and the route <PermissionGuard>
+// read this set; the server's requirePermission remains authoritative.
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { STORAGE } from '@/shared/lib/storage';
 
@@ -24,9 +25,13 @@ interface AuthState {
   memberships: Membership[];
   mustReset: boolean;
   permissions: string[];
+  /** False until the effective permission set for the active tenant has loaded. */
+  permissionsReady: boolean;
   isAuthed: boolean;
   hasPermission: (perm?: string) => boolean;
   login: (session: Session) => void;
+  setPermissions: (perms: string[]) => void;
+  resetPermissions: () => void;
   clearMustReset: () => void;
   logout: () => void;
 }
@@ -42,10 +47,6 @@ function readJSON<T>(key: string, fallback: T): T {
   }
 }
 
-// M1: every authenticated user gets the wildcard permission until M2 seeds the
-// real catalog. Centralised here so the switch to real perms is one line.
-const M1_PERMISSIONS = ['*'];
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem(STORAGE.token));
   const [memberships, setMemberships] = useState<Membership[]>(() =>
@@ -54,16 +55,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [mustReset, setMustReset] = useState<boolean>(
     () => readJSON<{ mustReset?: boolean }>(STORAGE.session, {}).mustReset ?? false,
   );
+  // Permissions persist across reloads (so a refresh doesn't flash unauthorised), but
+  // are re-fetched whenever the active tenant changes (see useSyncPermissions).
+  const [permissions, setPermsState] = useState<string[]>(() =>
+    readJSON<string[]>(STORAGE.permissions, []),
+  );
+  const [permissionsReady, setPermissionsReady] = useState<boolean>(
+    () => localStorage.getItem(STORAGE.permissions) !== null,
+  );
 
   const login = useCallback((session: Session) => {
     localStorage.setItem(STORAGE.token, session.accessToken);
     localStorage.setItem(STORAGE.refresh, session.refreshToken);
     localStorage.setItem(STORAGE.memberships, JSON.stringify(session.memberships));
     localStorage.setItem(STORAGE.session, JSON.stringify({ mustReset: session.mustReset }));
-    localStorage.setItem(STORAGE.permissions, JSON.stringify(M1_PERMISSIONS));
+    // Permissions are per-tenant; clear until a tenant is chosen and they load.
+    localStorage.removeItem(STORAGE.permissions);
     setToken(session.accessToken);
     setMemberships(session.memberships);
     setMustReset(session.mustReset);
+    setPermsState([]);
+    setPermissionsReady(false);
+  }, []);
+
+  const setPermissions = useCallback((perms: string[]) => {
+    localStorage.setItem(STORAGE.permissions, JSON.stringify(perms));
+    setPermsState(perms);
+    setPermissionsReady(true);
+  }, []);
+
+  const resetPermissions = useCallback(() => {
+    localStorage.removeItem(STORAGE.permissions);
+    setPermsState([]);
+    setPermissionsReady(false);
   }, []);
 
   const clearMustReset = useCallback(() => {
@@ -78,11 +102,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setMemberships([]);
     setMustReset(false);
+    setPermsState([]);
+    setPermissionsReady(false);
   }, []);
 
   const hasPermission = useCallback(
-    (perm?: string) => !perm || M1_PERMISSIONS.includes('*') || M1_PERMISSIONS.includes(perm),
-    [],
+    (perm?: string) => !perm || permissions.includes('*') || permissions.includes(perm),
+    [permissions],
   );
 
   const value = useMemo<AuthState>(
@@ -90,14 +116,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       token,
       memberships,
       mustReset,
-      permissions: M1_PERMISSIONS,
+      permissions,
+      permissionsReady,
       isAuthed: !!token,
       hasPermission,
       login,
+      setPermissions,
+      resetPermissions,
       clearMustReset,
       logout,
     }),
-    [token, memberships, mustReset, hasPermission, login, clearMustReset, logout],
+    [token, memberships, mustReset, permissions, permissionsReady, hasPermission, login, setPermissions, resetPermissions, clearMustReset, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -10,10 +10,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
+	"github.com/weloin/ved/internal/features/access"
 	"github.com/weloin/ved/internal/features/health"
 	"github.com/weloin/ved/internal/features/identity"
 	"github.com/weloin/ved/internal/features/notes"
 	"github.com/weloin/ved/internal/platform/auth"
+	"github.com/weloin/ved/internal/platform/authz"
 	"github.com/weloin/ved/internal/platform/config"
 	"github.com/weloin/ved/internal/platform/db"
 	"github.com/weloin/ved/internal/platform/httpx"
@@ -47,9 +49,21 @@ func main() {
 	jwtMgr := auth.NewManager(cfg.JWTSecret)
 	identRepo := identity.NewRepo(pool, nodeID)
 	identSvc := identity.NewService(identRepo, jwtMgr)
+
+	// RBAC (M2): the permission resolver/gate + the access slice. The catalog is global
+	// reference data seeded from code on every startup.
+	resolver := authz.NewResolver(pool)
+	accessRepo := access.NewRepo(pool, nodeID)
+	if err := access.SeedCatalog(ctx, accessRepo); err != nil {
+		slog.Error("seed permission catalog", "err", err)
+	}
+
 	if cfg.DevSeed {
-		if err := identity.SeedDevAdmin(ctx, identRepo); err != nil {
+		adminMembershipID, err := identity.SeedDevAdmin(ctx, identRepo)
+		if err != nil {
 			slog.Error("dev seed", "err", err)
+		} else if err := access.BootstrapTenant(ctx, accessRepo, uuid.MustParse(identity.DevTenantID), adminMembershipID); err != nil {
+			slog.Error("rbac bootstrap", "err", err)
 		}
 	}
 
@@ -65,10 +79,12 @@ func main() {
 		identity.RegisterMe(g, identSvc)
 	})
 
-	// Authenticated AND tenant-scoped (RLS armed): real domain slices.
+	// Authenticated AND tenant-scoped (RLS armed): real domain slices. Each slice route
+	// adds its own authz.Require(...) gate (M2 RBAC).
 	r.Group(func(g chi.Router) {
 		g.Use(httpx.Authenticator(jwtMgr))
 		g.Use(httpx.TenantContext)
+		access.Register(g, pool, nodeID, resolver)
 		notes.Register(g, pool, nodeID)
 	})
 
