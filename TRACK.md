@@ -5,7 +5,26 @@ The single place that records **how far the build has progressed** against the p
 
 **Legend:** ✅ done · 🟡 scaffolded / partial · ⬜ not started
 
-> **YOU ARE HERE:** M7 (Guardian Portal) **complete and verified** — child-scoped read
+> **YOU ARE HERE:** M8 (LMS) **complete and verified** — the final roadmap milestone, so
+> the whole phased build M0→M8 is now done. The new `learning` slice delivers the
+> content→submit→grade loop: teachers publish **assignments** (+ materials) anchored on a
+> `teaching_assignment`; students **submit** (self-service — resolved from their membership,
+> no staff perm; LATE derived from `due_at`); teachers **grade**. `submission` and `grade`
+> are **append-only** (a resubmission/re-grade is a NEW row, latest wins; DB triggers block
+> UPDATE/DELETE). The marquee **integration point**: grading an assignment with `max_marks`
+> writes an append-only `mark_entry` into academics **in the same tx** — so an assignment
+> counts toward assessment from the ONE marks ledger, not a parallel one (`mark_entry`
+> gained a nullable `exam_id` + `assignment_id`). Files carry only a MinIO `storage_key`.
+> Verified live: assignment published; student submit SUBMITTED → resubmit RESUBMITTED (2
+> rows kept, teacher sees latest-per-student); grade 72 → mark_entry 72; re-grade 85 → 2
+> grades + 2 mark_entries kept, effective 85; `UPDATE grade`/`DELETE submission` rejected
+> by trigger; student can't create/grade (403), non-student can't submit (403). FE: teacher
+> Assignments + grading screens, `tsc`/build clean. **The roadmap is complete (M0–M8).**
+> _Carried-forward (post-roadmap polish): LMS T3c (quizzes/discussion), lesson plans,
+> MinIO blob upload, student/guardian LMS FE; plus the standing items — platform SPA,
+> academics setup FE, OpenAPI specs, DB-integration tests, M6 hardening (HLC-merge/mTLS/DR)._
+
+> **(prev) M7 (Guardian Portal) — complete and verified** — child-scoped read
 > access on top of RLS. Per docs/18 the guardian is *an actor + a portal, not a slice*:
 > the only schema change is a nullable `guardian.membership_id` (links a login to a
 > contact record). A staff **promote** flow (`POST /students/guardians/{id}/promote`,
@@ -158,7 +177,7 @@ The single place that records **how far the build has progressed** against the p
 | **M5** Teachers/Staff/Academics/Finance | replicate the M3 shape across slices | ✅ verified (teachers, staff, academics, finance; append-only ledgers DB-enforced) |
 | **M6** Sync & Offline | NATS relay + inbox + HLC; wiring, not rewrite | 🟡 core verified (relay → JetStream → idempotent durable hub + offline replay); HLC-merge/mTLS/DR deferred |
 | **M7** Guardian Portal & Mobile | child-scoped read API; Expo read-heavy | 🟡 portal verified (child-scoped read API + promote + FE); Expo mobile + T2 writes ⬜ |
-| **M8** LMS | content → assignments → submission/grading | ⬜ |
+| **M8** LMS | content → assignments → submission/grading | ✅ verified (T3a+T3b: assignments/materials → submit → grade → marks; append-only; T3c deferred) |
 
 ---
 
@@ -380,6 +399,27 @@ sees only their 1 linked child; own child fees (outstanding 3000) + attendance 2
 contact update via maker-checker); child marks/timetable reads; the Expo mobile app
 (read-heavy, reuses this API + generated client).
 
+## Backend — `server/` (M8 LMS / learning) — ✅ verified — ROADMAP COMPLETE
+
+The LMS is academics' growth (docs/19, docs/database/07-lms.md): content → submit → grade,
+with grades feeding the ONE append-only marks ledger.
+
+| Component | File(s) | Status |
+|---|---|---|
+| Migration: `assignment` + `material` (T3a); `submission`/`submission_file`/`grade` (append-only, T3b) + triggers; `mark_entry` gains nullable `exam_id` + `assignment_id` | `db/migrations/00010_lms.sql` | ✅ applied |
+| academics: `teaching_assignment` create (anchor for LMS content) | `internal/features/academics/academics.go` | ✅ |
+| `learning` slice: assignment/material authoring (academics.manage); student submit (self-service, LATE detection, append-only); grade (marks.enter, append-only) + assignment-sourced `mark_entry` in same tx; list submissions (latest per student + grade) | `internal/features/learning/learning.go` | ✅ |
+| Node wiring | `cmd/node/main.go` | ✅ |
+| Frontend: teacher Assignments (list/create) + Assignment detail (submissions + grading) | `web/src/features/learning/` | ✅ |
+
+**Live verification:** assignment published; submit SUBMITTED → resubmit RESUBMITTED (2
+rows kept, teacher sees latest-per-student); grade 72 → assignment-sourced mark_entry 72;
+re-grade 85 → 2 grades + 2 mark_entries kept, effective 85; `UPDATE grade` / `DELETE
+submission` rejected by trigger; student can't create/grade (403), non-student can't
+submit (403).
+**Carried-forward:** T3c (quizzes/discussion/completion), lesson plans, MinIO blob upload,
+student + guardian LMS screens.
+
 ## Frontend — `web/` (M0) — 🟡 architecture scaffolded
 
 | Component | File(s) | Status |
@@ -420,7 +460,7 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
 | admin | ADMIN | tenant settings | ⬜ |
 | communication | ADMIN | notices, notifications | ⬜ |
 | reports | ADMIN | dashboards, exports, backup | ⬜ |
-| learning (LMS) | TEACHER/STUDENT/GUARDIAN | T3 | ⬜ |
+| learning (LMS) | TEACHER/STUDENT/GUARDIAN | teacher assignments + grading done; student/guardian planned | 🟡 (teacher T3a/T3b done) |
 | platform | SUPERADMIN | registrations, tenants, … | ⬜ SPA (separate build) — **M4 backend live** |
 
 ---
@@ -458,9 +498,12 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
    JetStream → idempotent durable hub + offline replay).
 11b. ~~**M7** (Guardian Portal — child-scoped read API).~~ ✅ portal done & verified
    (promote + scoped reads + FE). Remaining M7: Expo mobile app + Tier-2 guarded writes.
-12b. **Next:** **M8** (LMS — content → assignments → submission/grading); Tier-2 guardian
-   writes (online pay, leave); finish M6 hardening (HLC-merge, mTLS, DR); the platform SPA;
-   or academics/finance config + FE.
+12b. ~~**M8** (LMS — content → assignments → submission/grading).~~ ✅ done & verified.
+   **The phased roadmap M0→M8 is COMPLETE.**
+13b. **Post-roadmap polish (no roadmap milestone left):** platform SPA; academics setup +
+   student/guardian FE; LMS T3c (quizzes/discussion) + MinIO blob upload; Tier-2 guardian
+   writes; M6 hardening (HLC-merge for mutable rows, mTLS, cloud→node push-down, DR drill);
+   OpenAPI spec files + automated DB-integration tests.
 9. **DoD backfill:** frozen OpenAPI spec files (`/auth/*`, `/access/*`, `/students/*`) +
    automated DB integration tests (RLS isolation, golden-rule atomicity); Redis cache for
    effective permissions; document upload (MinIO) + onboarding wizard/approval states.

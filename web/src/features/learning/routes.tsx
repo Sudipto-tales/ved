@@ -26,8 +26,9 @@ export const learningPages: PageDef[] = [
     persona: 'TEACHER',
     permission: 'academics.manage',
     tier: 'T3',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/AssignmentsPage'),
   },
   {
     path: 'teacher/assignments/:id',
@@ -35,7 +36,8 @@ export const learningPages: PageDef[] = [
     persona: 'TEACHER',
     permission: 'academics.manage',
     tier: 'T3',
-    status: 'planned',
+    status: 'done',
+    element: () => import('./pages/AssignmentDetailPage'),
   },
   {
     path: 'teacher/grade-submissions',

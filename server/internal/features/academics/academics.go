@@ -164,6 +164,31 @@ func (s *Service) Enroll(ctx context.Context, tenantID, actor, sectionID, studen
 	return id, err
 }
 
+// CreateTeachingAssignment binds a teacher to a (section, subject) for the current year —
+// the anchor every LMS row (assignment, material) hangs off (docs/database/07-lms.md).
+func (s *Service) CreateTeachingAssignment(ctx context.Context, tenantID, actor, sectionID, subjectID, teacherID uuid.UUID) (uuid.UUID, error) {
+	id := uuid.Must(uuid.NewV7())
+	err := s.engine.WithTenant(ctx, tenantID, func(tx pgx.Tx) error {
+		var year uuid.UUID
+		if err := tx.QueryRow(ctx, `SELECT academic_year_id FROM section WHERE id=$1 AND deleted_at IS NULL`, sectionID).Scan(&year); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return ErrNotFound
+			}
+			return err
+		}
+		hlc := onboarding.NowHLC()
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO teaching_assignment (id, tenant_id, section_id, subject_id, teacher_id, academic_year_id, created_by, hlc, version, origin_node_id)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,1,$9)`,
+			id, tenantID, sectionID, subjectID, teacherID, year, onboarding.NilUUID(actor), hlc, s.engine.NodeID()); err != nil {
+			return fmt.Errorf("insert teaching_assignment: %w", err)
+		}
+		b, _ := json.Marshal(map[string]any{"id": id, "section_id": sectionID, "subject_id": subjectID, "teacher_id": teacherID})
+		return s.engine.WriteEventAndAudit(ctx, tx, tenantID, "teaching_assignment", id, "teaching_assignment.create", actor, b, hlc)
+	})
+	return id, err
+}
+
 // ---- Append-only: attendance -----------------------------------------------------
 
 type AttendanceEntry struct {
@@ -370,6 +395,18 @@ func Register(r chi.Router, pool *pgxpool.Pool, nodeID uuid.UUID, res *authz.Res
 			return
 		}
 		id, e := svc.Enroll(req.Context(), httpx.TenantID(req.Context()), actorID(req), sid, in.StudentID, in.RollNo)
+		respond(w, id, e)
+	})
+	r.With(manage).Post("/api/v1/academics/teaching-assignments", func(w http.ResponseWriter, req *http.Request) {
+		var in struct {
+			SectionID uuid.UUID `json:"section_id"`
+			SubjectID uuid.UUID `json:"subject_id"`
+			TeacherID uuid.UUID `json:"teacher_id"`
+		}
+		if decode(w, req, &in) != nil {
+			return
+		}
+		id, e := svc.CreateTeachingAssignment(req.Context(), httpx.TenantID(req.Context()), actorID(req), in.SectionID, in.SubjectID, in.TeacherID)
 		respond(w, id, e)
 	})
 	r.With(manage).Post("/api/v1/academics/exams", func(w http.ResponseWriter, req *http.Request) {

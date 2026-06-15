@@ -16,6 +16,7 @@ import (
 	"github.com/weloin/ved/internal/features/guardian"
 	"github.com/weloin/ved/internal/features/health"
 	"github.com/weloin/ved/internal/features/identity"
+	"github.com/weloin/ved/internal/features/learning"
 	"github.com/weloin/ved/internal/features/staff"
 	"github.com/weloin/ved/internal/features/students"
 	"github.com/weloin/ved/internal/features/teachers"
@@ -132,6 +133,7 @@ func main() {
 		academics.Register(g, pool, nodeID, resolver)
 		finance.Register(g, pool, nodeID, resolver)
 		guardian.Register(g, pool, nodeID, resolver)
+		learning.Register(g, pool, nodeID, resolver)
 	})
 
 	if err := httpx.Serve(cfg.HTTPAddr, r); err != nil {
