@@ -38,3 +38,6 @@ Thumbs.db
 .vscode/
 *.swp
 *~
+
+# Generated demo-seed record (contains one-time creds; recreated by ./ved.sh seed-demo)
+scripts/demo-seed-record.json
