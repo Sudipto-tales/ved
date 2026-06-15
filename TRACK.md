@@ -5,7 +5,29 @@ The single place that records **how far the build has progressed** against the p
 
 **Legend:** ✅ done · 🟡 scaffolded / partial · ⬜ not started
 
-> **YOU ARE HERE:** M3 (Onboarding + Students) **complete and verified** — the first real
+> **YOU ARE HERE:** M4 (Control Plane) **backend complete and verified** — the central
+> cloud that registers schools and provisions tenants, a SEPARATE binary
+> (`cmd/controlplane`), SEPARATE schema (`control_plane`), and SEPARATE permission
+> namespace (`platform.*`). The full chain runs end to end: platform superadmin login →
+> school self-registers (slug validated/unique) → uploads payment proof
+> (`PENDING_PAYMENT_REVIEW`) → superadmin **approves** → in one control-plane tx the
+> registration state machine advances (tenant ACTIVE + subscription ACTIVE + **gapless**
+> invoice + payment-proof APPROVED + a **signed** offline license) → then the **cross-plane
+> handoff** provisions the tenant plane: first admin (generated credential + temp
+> password), the M2 RBAC bootstrap (default roles + School Admin), and the M3
+> tenant_profile slug. Verified live: register/duplicate-slug 409, proof 202, approve →
+> `INV-2026-00001/00002` gapless, license signed; **the provisioned admin logs into the
+> tenant node and resolves 31 effective permissions (tenant.admin) and hits gated
+> `/access/roles` 200**; platform endpoints 401 without a platform token. (Found & fixed a
+> real bug: `BootstrapTenant`'s School-Admin lookup relied on RLS, which the
+> superuser control plane bypasses — now filters `tenant_id` explicitly, defence-in-depth.)
+> license sign/verify is unit-tested. **Deferred:** the platform **SPA** (`web/platform/`
+> is a separate Vite build, still manifest-only) and MinIO payment-proof upload (metadata
+> + storage_key wired; blob path is the next step). Next: build the platform SPA, and/or
+> **M5** (replicate the M3 shape for teachers/staff/academics/finance). _DoD carried
+> forward: OpenAPI specs; automated DB-integration tests; control-plane audit log._
+
+> **(prev) M3 (Onboarding + Students) — complete and verified** — the first real
 > domain slice, which completes the walking skeleton. `student.onboard` runs the whole
 > admission in **one transaction** (flow A): global `users` (generated login handle +
 > temp password, `must_reset_password`) + `memberships` (STUDENT) [+ optional roles] +
@@ -57,7 +79,7 @@ The single place that records **how far the build has progressed** against the p
 | **M1** Identity & Tenancy | real `users`/`memberships`, JWT login, tenant resolve | ✅ verified (argon2id + JWT + memberships + RLS-authorised tenant) |
 | **M2** RBAC | permission catalog, roles, `requirePermission`, provisioning bootstrap | ✅ verified (catalog seed + default roles + real `requirePermission` + FE real perms) |
 | **M3** Onboarding + Students | credential gen, onboarding engine, first real domain slice | ✅ verified (student.onboard tx + credential gen + roster/detail; notes retired) |
-| **M4** Control Plane | registration state machine, payment-proof, licensing | ⬜ |
+| **M4** Control Plane | registration state machine, payment-proof, licensing | ✅ backend verified (register→approve→provision→license + cross-plane handoff); platform SPA deferred |
 | **M5** Teachers/Staff/Academics/Finance | replicate the M3 shape across slices | ⬜ |
 | **M6** Sync & Offline | NATS relay + inbox + HLC; wiring, not rewrite | ⬜ |
 | **M7** Guardian Portal & Mobile | child-scoped read API; Expo read-heavy | ⬜ |
@@ -161,6 +183,35 @@ no-token 401; RLS on `student` as `ved_app` (own 2, foreign 0).
 **Carried-forward:** OpenAPI spec; DB-integration tests; document upload (MinIO, M4);
 onboarding wizard/approval states (direct/skip path shipped).
 
+## Backend — `server/` (M4 Control Plane) — ✅ verified (FE deferred)
+
+Separate binary (`cmd/controlplane`), separate schema (`control_plane`), separate
+permission namespace (`platform.*`). Control-plane tables carry **no** tenant_id/RLS/sync
+(docs/database/01), so control-plane writes are plain transactional; the golden rule
+applies only to the tenant-plane rows that provisioning creates in `public`.
+
+| Component | File(s) | Status |
+|---|---|---|
+| Control-plane migration (own schema + own goose table): registration, tenant, plan_catalog, subscription, invoice, payment_proof, license, platform_admin, gapless counter | `db/cpmigrations/00001_control_plane.sql` | ✅ applied |
+| Migrate plumbing (`UpControlPlane`, separate FS + version table) | `internal/platform/migrate/migrate.go` | ✅ |
+| Signed offline license kernel (HMAC sign/verify) | `internal/platform/license/` | ✅ + unit tests |
+| Platform auth slice (admin login → platform JWT, `RequirePermission`, dev superadmin seed) — separate namespace | `internal/features/platform/` | ✅ |
+| Registration slice: public register + payment-proof; platform list/approve/reject/tenants | `internal/features/registration/registration.go` | ✅ |
+| Approve = state machine (tenant+subscription+gapless invoice+proof+signed license) **+ cross-plane provisioning** (tenant admin via credential gen + M2 RBAC bootstrap + M3 tenant_profile) | same | ✅ |
+| Control-plane wiring (migrate cp, seed superadmin+plans, public+platform routes) | `cmd/controlplane/main.go` | ✅ |
+
+**Dev seed:** platform superadmin `super@ved.platform` / `super1234`; plans Starter/
+Standard/Premium. **Live verification:** full chain register→proof→approve→provision→
+license; gapless `INV-2026-00001/00002`; the provisioned tenant admin logs into the node
+and resolves **31** perms (tenant.admin) + gated `/access/roles` 200; platform routes 401
+without a platform token; duplicate slug 409.
+**Fixed:** `BootstrapTenant` School-Admin lookup now filters `tenant_id` explicitly (the
+superuser control plane bypasses RLS — relying on it cross-attached the wrong tenant's
+role; caught in live verification).
+**Deferred / carried-forward:** the platform **SPA** (`web/platform/`, separate build);
+MinIO payment-proof blob upload (metadata + storage_key wired); a control-plane audit log;
+OpenAPI specs; automated DB-integration tests.
+
 ## Frontend — `web/` (M0) — 🟡 architecture scaffolded
 
 | Component | File(s) | Status |
@@ -202,7 +253,7 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
 | communication | ADMIN | notices, notifications | ⬜ |
 | reports | ADMIN | dashboards, exports, backup | ⬜ |
 | learning (LMS) | TEACHER/STUDENT/GUARDIAN | T3 | ⬜ |
-| platform | SUPERADMIN | registrations, tenants, … | ⬜ (separate build) |
+| platform | SUPERADMIN | registrations, tenants, … | ⬜ SPA (separate build) — **M4 backend live** |
 
 ---
 
@@ -226,12 +277,14 @@ Only `auth/login` and `notes` are built. Page inventory: [docs/22-frontend.md](.
    `requirePermission("student.onboard")`. The `notes` demo slice retires here.~~ ✅ done
    & verified (credential generator, one-tx onboard, roster/onboard/detail screens, notes
    retired).
-8. **Begin M4 (Control Plane) and/or M5 (replicate):** M4 — `cmd/controlplane` slices for
-   school registration state machine, payment-proof (MinIO), licensing, tenant
-   provisioning (which calls the M2 RBAC bootstrap + M3 tenant_profile seed for real
-   tenants). M5 — clone the M3 shape for `teachers`/`staff` (reuse the onboarding engine)
-   then `academics`/`finance`. These can run in parallel after the spine (M0→M3) — now
-   complete.
+8. ~~**Begin M4 (Control Plane):** `cmd/controlplane` slices for school registration
+   state machine, payment-proof, licensing, tenant provisioning (which calls the M2 RBAC
+   bootstrap + M3 tenant_profile seed for real tenants).~~ ✅ backend done & verified
+   (register→approve→provision→license + cross-plane handoff). **Remaining:** the platform
+   SPA (`web/platform/`) + MinIO payment-proof upload + control-plane audit log.
+8b. **M5 (replicate):** clone the M3 shape for `teachers`/`staff` (reuse the credential
+   generator + onboarding engine), then `academics`/`finance` (append-only ledgers/marks/
+   attendance). Independent tracks now the spine (M0→M3) + control plane exist.
 9. **DoD backfill:** frozen OpenAPI spec files (`/auth/*`, `/access/*`, `/students/*`) +
    automated DB integration tests (RLS isolation, golden-rule atomicity); Redis cache for
    effective permissions; document upload (MinIO) + onboarding wizard/approval states.

@@ -87,8 +87,12 @@ func BootstrapTenant(ctx context.Context, repo *Repo, tenantID, adminMembershipI
 		// Attach the first admin to School Admin (tenant.admin) if not already attached.
 		if adminMembershipID != uuid.Nil {
 			var schoolAdminID uuid.UUID
+			// Filter by tenant_id explicitly (defence-in-depth): provisioning may run as a
+			// superuser (the control plane at M4), which BYPASSES RLS even with FORCE — so
+			// we must not rely on app.tenant_id alone to scope this lookup.
 			err := tx.QueryRow(ctx,
-				`SELECT id FROM roles WHERE name = $1 AND deleted_at IS NULL`, authz.SchoolAdminRole).Scan(&schoolAdminID)
+				`SELECT id FROM roles WHERE name = $1 AND tenant_id = $2 AND deleted_at IS NULL`,
+				authz.SchoolAdminRole, tenantID).Scan(&schoolAdminID)
 			if err != nil {
 				return fmt.Errorf("lookup school admin role: %w", err)
 			}
