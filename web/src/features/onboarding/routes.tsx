@@ -7,8 +7,9 @@ export const onboardingPages: PageDef[] = [
     title: 'Onboarding',
     persona: 'STAFF',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/OnboardingHubPage'),
   },
   {
     path: 'onboarding/approvals',
@@ -16,7 +17,8 @@ export const onboardingPages: PageDef[] = [
     persona: 'STAFF',
     permission: 'onboarding.approve',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/ApprovalsPage'),
   },
 ];

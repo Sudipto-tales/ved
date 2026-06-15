@@ -54,3 +54,30 @@ export function useOnboardTeacher() {
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.teachers }),
   });
 }
+
+// --- Teacher portal: academics tools (calls the existing academics slice; not edited here) ---
+
+export interface AttendanceEntry {
+  enrollment_id: string;
+  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED';
+}
+
+export function useMarkAttendance() {
+  return useMutation({
+    mutationFn: (body: { section_id: string; marked_by: string; date: string; entries: AttendanceEntry[] }) =>
+      api.post<void>('/api/v1/academics/attendance', body),
+  });
+}
+
+export interface MarkEntryInput {
+  enrollment_id: string;
+  subject_id: string;
+  marks: number;
+}
+
+export function useEnterMarks() {
+  return useMutation({
+    mutationFn: (body: { exam_id: string; graded_by: string; entries: MarkEntryInput[] }) =>
+      api.post<void>('/api/v1/academics/marks', body),
+  });
+}

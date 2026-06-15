@@ -11,6 +11,11 @@ import { PlannedPage } from './PlannedPage';
 import { PlatformShell } from './PlatformShell';
 import { usePlatformAuth } from '../shared/auth';
 import LoginPage from '../features/auth/LoginPage';
+import { SignupLayout } from '../features/signup/SignupLayout';
+import SignupLandingPage from '../features/signup/SignupLandingPage';
+import SignupRegisterPage from '../features/signup/SignupRegisterPage';
+import SignupProofPage from '../features/signup/SignupProofPage';
+import SignupStatusPage from '../features/signup/SignupStatusPage';
 
 function AuthGuard() {
   const { isAuthed } = usePlatformAuth();
@@ -45,6 +50,16 @@ function elementFor(page: PageDef): ReactNode {
 
 export const router = createBrowserRouter([
   { element: <AuthLayout />, children: [{ path: '/login', element: <LoginPage /> }] },
+  // PUBLIC self-registration site — UNAUTHENTICATED, outside the AuthGuard (docs/01).
+  {
+    element: <SignupLayout />,
+    children: [
+      { path: '/signup', element: <SignupLandingPage /> },
+      { path: '/signup/register', element: <SignupRegisterPage /> },
+      { path: '/signup/proof/:id', element: <SignupProofPage /> },
+      { path: '/signup/status/:id', element: <SignupStatusPage /> },
+    ],
+  },
   {
     element: <AuthGuard />,
     children: [

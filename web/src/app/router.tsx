@@ -5,6 +5,8 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 
+import { PersonaHome } from '@/app/PersonaHome';
+
 import { AuthLayout } from '@/app/layouts/AuthLayout';
 import { AppShell } from '@/app/layouts/AppShell';
 import { AuthGuard } from '@/app/guards/AuthGuard';
@@ -48,7 +50,7 @@ export const router = createBrowserRouter([
           {
             element: <AppShell />,
             children: [
-              { index: true, element: <Navigate to="/students" replace /> },
+              { index: true, element: <PersonaHome /> },
               ...protectedPages.map((p) => ({ path: p.path, element: elementFor(p) })),
             ],
           },

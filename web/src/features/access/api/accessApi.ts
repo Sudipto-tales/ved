@@ -24,10 +24,34 @@ export interface Member {
   role_ids: string[];
 }
 
+export interface Designation {
+  id: string;
+  name: string;
+  applies_to_user_type?: string | null;
+}
+
+export interface TenantProfile {
+  id: string;
+  display_name: string;
+  slug: string;
+  institution_type: string;
+}
+
+export interface AcademicYear {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  is_current: boolean;
+}
+
 export const accessKeys = {
   permissions: ['access', 'permissions'] as const,
   roles: ['access', 'roles'] as const,
   members: ['access', 'members'] as const,
+  designations: ['access', 'designations'] as const,
+  profile: ['access', 'profile'] as const,
+  academicYears: ['access', 'academic-years'] as const,
 };
 
 export function usePermissionCatalog() {
@@ -83,5 +107,35 @@ export function useSetMemberRoles() {
     mutationFn: ({ membershipId, roleIds }: { membershipId: string; roleIds: string[] }) =>
       api.put<void>(`/api/v1/access/members/${membershipId}/roles`, { role_ids: roleIds }),
     onSuccess: () => qc.invalidateQueries({ queryKey: accessKeys.members }),
+  });
+}
+
+export function useDesignations() {
+  return useQuery({
+    queryKey: accessKeys.designations,
+    queryFn: () => api.get<{ designations: Designation[] }>('/api/v1/access/designations'),
+  });
+}
+
+export function useCreateDesignation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; applies_to_user_type?: string | null }) =>
+      api.post<Designation>('/api/v1/access/designations', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: accessKeys.designations }),
+  });
+}
+
+export function useTenantProfile() {
+  return useQuery({
+    queryKey: accessKeys.profile,
+    queryFn: () => api.get<TenantProfile>('/api/v1/access/profile'),
+  });
+}
+
+export function useAcademicYears() {
+  return useQuery({
+    queryKey: accessKeys.academicYears,
+    queryFn: () => api.get<{ academic_years: AcademicYear[] }>('/api/v1/access/academic-years'),
   });
 }

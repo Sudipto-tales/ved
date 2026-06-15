@@ -8,8 +8,9 @@ export const learningPages: PageDef[] = [
     persona: 'TEACHER',
     permission: 'academics.manage',
     tier: 'T3',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/LessonPlansPage'),
   },
   {
     path: 'teacher/materials',
@@ -17,8 +18,9 @@ export const learningPages: PageDef[] = [
     persona: 'TEACHER',
     permission: 'academics.manage',
     tier: 'T3',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/MaterialsPage'),
   },
   {
     path: 'teacher/assignments',
@@ -45,8 +47,9 @@ export const learningPages: PageDef[] = [
     persona: 'TEACHER',
     permission: 'marks.enter',
     tier: 'T3',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/GradeSubmissionsPage'),
   },
   // Student (self-service — no permission gate)
   {
@@ -54,22 +57,25 @@ export const learningPages: PageDef[] = [
     title: 'My Assignments',
     persona: 'STUDENT',
     tier: 'T3',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/MyAssignmentsPage'),
   },
   {
     path: 'assignments/:id',
     title: 'Assignment',
     persona: 'STUDENT',
     tier: 'T3',
-    status: 'planned',
+    status: 'done',
+    element: () => import('./pages/StudentAssignmentPage'),
   },
   {
     path: 'assignments/:id/submit',
     title: 'Submit Work',
     persona: 'STUDENT',
     tier: 'T3',
-    status: 'planned',
+    status: 'done',
+    element: () => import('./pages/SubmitWorkPage'),
   },
   // Guardian (self-scoped visibility — no permission gate)
   {
@@ -77,7 +83,8 @@ export const learningPages: PageDef[] = [
     title: 'Child Assignment Status',
     persona: 'GUARDIAN',
     tier: 'T3',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/ChildAssignmentsPage'),
   },
 ];

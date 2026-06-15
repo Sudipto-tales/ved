@@ -17,8 +17,9 @@ export const accessPages: PageDef[] = [
     persona: 'ADMIN',
     permission: 'designation.manage',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/DesignationsPage'),
   },
   {
     path: 'access/user-roles',
@@ -36,7 +37,8 @@ export const accessPages: PageDef[] = [
     persona: 'ADMIN',
     permission: 'role.manage',
     tier: 'T2',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/MakerCheckerPage'),
   },
 ];

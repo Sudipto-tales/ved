@@ -43,7 +43,8 @@ export const platformPages: PageDef[] = [
     persona: 'SUPERADMIN',
     permission: 'platform.registration.review',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
+    element: () => import('./features/registrations/RegistrationDetailPage'),
   },
   {
     path: 'payment-proofs',
@@ -51,17 +52,19 @@ export const platformPages: PageDef[] = [
     persona: 'SUPERADMIN',
     permission: 'platform.payment.review',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./features/payment-proofs/PaymentProofsPage'),
   },
   {
-    // approve | reject(reason) | request-info on a payment submission (docs/11).
+    // approve | reject(reason) on a payment submission (docs/11).
     path: 'payment-proofs/:id',
     title: 'Payment Proof Review',
     persona: 'SUPERADMIN',
     permission: 'platform.payment.review',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
+    element: () => import('./features/payment-proofs/PaymentProofDetailPage'),
   },
   {
     path: 'tenants',
@@ -80,7 +83,8 @@ export const platformPages: PageDef[] = [
     persona: 'SUPERADMIN',
     permission: 'platform.tenant.manage',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
+    element: () => import('./features/tenants/TenantDetailPage'),
   },
 
   // ── T2/T3: monetization, entitlements, insight, support (docs/11)
@@ -92,8 +96,9 @@ export const platformPages: PageDef[] = [
     persona: 'SUPERADMIN',
     permission: 'platform.subscription.manage',
     tier: 'T2',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./features/subscriptions/SubscriptionsPage'),
   },
   {
     // Issued signed licenses — view / revoke (docs/01, docs/11 enforcement token).
@@ -113,8 +118,9 @@ export const platformPages: PageDef[] = [
     persona: 'SUPERADMIN',
     permission: 'platform.analytics.view',
     tier: 'T3',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./features/analytics/AnalyticsPage'),
   },
   {
     path: 'support',
@@ -122,7 +128,8 @@ export const platformPages: PageDef[] = [
     persona: 'SUPERADMIN',
     permission: 'platform.support.manage',
     tier: 'T3',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./features/support/SupportPage'),
   },
 ];

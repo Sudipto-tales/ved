@@ -27,8 +27,9 @@ export const guardiansPages: PageDef[] = [
     persona: 'GUARDIAN',
     permission: 'guardian.read_child',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/ChildMarksPage'),
   },
   {
     path: 'guardian/children/:childId/timetable',
@@ -36,8 +37,9 @@ export const guardiansPages: PageDef[] = [
     persona: 'GUARDIAN',
     permission: 'guardian.read_child',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/ChildTimetablePage'),
   },
   {
     path: 'guardian/children/:childId/fees',
@@ -54,8 +56,9 @@ export const guardiansPages: PageDef[] = [
     title: 'Notices',
     persona: 'GUARDIAN',
     tier: 'T1',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/NoticesPage'),
   },
   // Tier 2 — guarded writes
   {
@@ -64,15 +67,17 @@ export const guardiansPages: PageDef[] = [
     persona: 'GUARDIAN',
     permission: 'guardian.pay_fees',
     tier: 'T2',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/PayFeesPage'),
   },
   {
     path: 'guardian/notices/:noticeId/acknowledge',
     title: 'Consent & Acknowledge Notices',
     persona: 'GUARDIAN',
     tier: 'T2',
-    status: 'planned',
+    status: 'done',
+    element: () => import('./pages/NoticeAcknowledgePage'),
   },
   {
     path: 'guardian/contact',
@@ -80,8 +85,9 @@ export const guardiansPages: PageDef[] = [
     persona: 'GUARDIAN',
     permission: 'guardian.update_own_contact',
     tier: 'T2',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/ContactPage'),
   },
   {
     path: 'guardian/children/:childId/leave-request',
@@ -89,7 +95,8 @@ export const guardiansPages: PageDef[] = [
     persona: 'GUARDIAN',
     permission: 'guardian.request_leave',
     tier: 'T2',
-    status: 'planned',
+    status: 'done',
     nav: true,
+    element: () => import('./pages/LeaveRequestPage'),
   },
 ];

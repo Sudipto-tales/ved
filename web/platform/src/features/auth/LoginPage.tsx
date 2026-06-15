@@ -1,7 +1,7 @@
 // Platform superadmin login. Dev defaults match the control-plane seed
 // (platform.SeedSuperAdmin). Empty in any real deployment.
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/shared/ui';
 import { ApiError } from '../../shared/api';
 import { usePlatformAuth } from '../../shared/auth';
@@ -49,6 +49,9 @@ export default function LoginPage() {
           {busy ? 'Signing in…' : 'Sign in'}
         </Button>
       </div>
+      <p className="subtle" style={{ fontSize: 12, marginTop: 14, textAlign: 'center' }}>
+        New school? <Link to="/signup">Register here</Link>
+      </p>
     </form>
   );
 }

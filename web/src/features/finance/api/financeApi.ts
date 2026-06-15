@@ -20,9 +20,66 @@ export interface Ledger {
   outstanding: number;
 }
 
+export interface FeeHead {
+  id: string;
+  name: string;
+  kind: string;
+}
+
+export interface InvoiceRow {
+  id: string;
+  student_id: string;
+  status: string;
+  issued_at: string;
+  due_date: string | null;
+}
+
+export interface PaymentRow {
+  id: string;
+  student_id: string;
+  receipt_no: string;
+  amount: number;
+  method: string;
+  status: string;
+  paid_at: string;
+}
+
 export const financeKeys = {
   ledger: (studentId: string) => ['finance', 'ledger', studentId] as const,
+  feeHeads: ['finance', 'fee-heads'] as const,
+  invoices: ['finance', 'invoices'] as const,
+  payments: ['finance', 'payments'] as const,
 };
+
+export function useFeeHeads() {
+  return useQuery({
+    queryKey: financeKeys.feeHeads,
+    queryFn: () => api.get<{ fee_heads: FeeHead[] }>('/api/v1/finance/fee-heads'),
+  });
+}
+
+export function useCreateFeeHead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { name: string; kind: string }) =>
+      api.post<{ id: string }>('/api/v1/finance/fee-heads', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.feeHeads }),
+  });
+}
+
+export function useInvoices() {
+  return useQuery({
+    queryKey: financeKeys.invoices,
+    queryFn: () => api.get<{ invoices: InvoiceRow[] }>('/api/v1/finance/invoices'),
+  });
+}
+
+export function usePayments() {
+  return useQuery({
+    queryKey: financeKeys.payments,
+    queryFn: () => api.get<{ payments: PaymentRow[] }>('/api/v1/finance/payments'),
+  });
+}
 
 export function useLedger(studentId: string) {
   return useQuery({

@@ -2,6 +2,7 @@
 // tenant + subscription + gapless invoice + signed license + tenant-plane provisioning —
 // and returns the new school admin's one-time credentials, shown once here.
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Badge, Button, Card, PageHeader, Spinner } from '@/shared/ui';
 import { useRegistrations, useApprove, useReject, type ApproveResult } from './api';
 
@@ -48,7 +49,7 @@ export default function RegistrationsPage() {
           <div className="row" key={r.id} style={{ alignItems: 'flex-start' }}>
             <div style={{ flex: 1 }}>
               <div className="flex gap-8" style={{ alignItems: 'center' }}>
-                <span style={{ fontWeight: 600 }}>{r.school_name}</span>
+                <Link to={`/registrations/${r.id}`} style={{ fontWeight: 600 }}>{r.school_name}</Link>
                 <span className="subtle" style={{ fontSize: 12 }}>/{r.slug}</span>
                 <Badge tone={STATUS_TONE[r.status] ?? 'neutral'}>{r.status}</Badge>
                 {r.proof_status && <Badge tone="neutral">proof {r.proof_status}</Badge>}

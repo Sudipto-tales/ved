@@ -1,5 +1,6 @@
 // The tenant directory — every school the platform has provisioned.
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { Badge, Card, PageHeader, Spinner } from '@/shared/ui';
 import { api } from '../../shared/api';
 
@@ -27,7 +28,7 @@ export default function TenantsPage() {
         {data?.tenants.map((t) => (
           <div className="row" key={t.id}>
             <div style={{ flex: 1 }}>
-              <span style={{ fontWeight: 600 }}>{t.name}</span>
+              <Link to={`/tenants/${t.id}`} style={{ fontWeight: 600 }}>{t.name}</Link>
               <span className="subtle" style={{ fontSize: 12, marginLeft: 8 }}>/{t.slug}</span>
             </div>
             <Badge tone={t.status === 'ACTIVE' ? 'success' : 'neutral'}>{t.status}</Badge>

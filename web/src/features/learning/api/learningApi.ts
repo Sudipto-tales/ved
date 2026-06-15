@@ -21,9 +21,18 @@ export interface SubmissionRow {
   marks: number | null;
 }
 
+export interface Material {
+  id: string;
+  title: string;
+  kind: string;
+  url?: string;
+  body?: string;
+}
+
 export const learningKeys = {
   assignments: (taId: string) => ['learning', 'assignments', taId] as const,
   submissions: (assignmentId: string) => ['learning', 'submissions', assignmentId] as const,
+  materials: (assignmentId: string) => ['learning', 'materials', assignmentId] as const,
 };
 
 export function useAssignments(taId: string) {
@@ -57,5 +66,37 @@ export function useGrade(assignmentId: string) {
     mutationFn: ({ submissionId, marks, feedback }: { submissionId: string; marks: number; feedback?: string }) =>
       api.post<{ grade_id: string }>(`/api/v1/learning/submissions/${submissionId}/grade`, { marks, feedback }),
     onSuccess: () => qc.invalidateQueries({ queryKey: learningKeys.submissions(assignmentId) }),
+  });
+}
+
+// Materials — list (read-only GET added to learning.go) + create (POST materials).
+export function useMaterials(assignmentId: string) {
+  return useQuery({
+    queryKey: learningKeys.materials(assignmentId),
+    queryFn: () => api.get<{ materials: Material[] }>(`/api/v1/learning/assignments/${assignmentId}/materials`),
+    enabled: !!assignmentId,
+  });
+}
+
+export function useAddMaterial(assignmentId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { title: string; kind: string; url?: string; body?: string }) =>
+      api.post<{ material_id: string }>(`/api/v1/learning/assignments/${assignmentId}/materials`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: learningKeys.materials(assignmentId) }),
+  });
+}
+
+// Student self-service submit (no permission gate; the server resolves the student).
+export interface SubmissionFileInput {
+  storage_key: string;
+  filename: string;
+  size: number;
+}
+
+export function useSubmitWork(assignmentId: string) {
+  return useMutation({
+    mutationFn: (files: SubmissionFileInput[]) =>
+      api.post<{ submission_id: string; status: string }>(`/api/v1/learning/assignments/${assignmentId}/submit`, { files }),
   });
 }

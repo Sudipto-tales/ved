@@ -28,10 +28,24 @@ export interface ChildFees {
   outstanding: number;
 }
 
+export interface Exam {
+  id: string;
+  name: string;
+  max_marks: number;
+}
+
+export interface ChildMark {
+  subject_id: string;
+  subject_name?: string;
+  marks: number;
+}
+
 export const guardianKeys = {
   children: ['guardian', 'children'] as const,
   attendance: (id: string) => ['guardian', 'attendance', id] as const,
   fees: (id: string) => ['guardian', 'fees', id] as const,
+  exams: ['guardian', 'exams'] as const,
+  marks: (childId: string, examId: string) => ['guardian', 'marks', childId, examId] as const,
 };
 
 export function useChildren() {
@@ -54,5 +68,23 @@ export function useChildFees(childId: string) {
     queryKey: guardianKeys.fees(childId),
     queryFn: () => api.get<ChildFees>(`/api/v1/guardian/children/${childId}/fees`),
     enabled: !!childId,
+  });
+}
+
+export function useExams() {
+  return useQuery({
+    queryKey: guardianKeys.exams,
+    queryFn: () => api.get<{ exams: Exam[] }>('/api/v1/guardian/exams'),
+  });
+}
+
+export function useChildMarks(childId: string, examId: string) {
+  return useQuery({
+    queryKey: guardianKeys.marks(childId, examId),
+    queryFn: () =>
+      api.get<{ marks: ChildMark[]; note?: string }>(
+        `/api/v1/guardian/children/${childId}/marks?exam_id=${examId}`,
+      ),
+    enabled: !!childId && !!examId,
   });
 }

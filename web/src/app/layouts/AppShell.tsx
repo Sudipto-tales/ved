@@ -30,12 +30,27 @@ const ICONS: Record<string, IconName> = {
 };
 const iconFor = (path: string): IconName => ICONS[path.split('/')[0]] ?? 'grid';
 
+// A user's membership user_type decides which persona experience they see — an EMPLOYEE
+// gets the management UI (ADMIN + STAFF groups, further gated by permission); a TEACHER /
+// STUDENT / GUARDIAN gets only their own portal. Without this, permission-less portal
+// pages would leak into every user's sidebar.
+const PERSONAS_FOR: Record<string, Persona[]> = {
+  EMPLOYEE: ['ADMIN', 'STAFF'],
+  TEACHER: ['TEACHER'],
+  STUDENT: ['STUDENT'],
+  GUARDIAN: ['GUARDIAN'],
+};
+
 export function AppShell() {
-  const { logout } = useAuth();
+  const { logout, memberships } = useAuth();
   const { activeTenantId, clearTenant } = useTenant();
   useSyncPermissions(); // load effective permissions for the active tenant (M2)
   const loc = useLocation();
   const navPages = protectedPages.filter((p) => p.nav);
+
+  const userType = memberships.find((m) => m.tenant_id === activeTenantId)?.user_type ?? 'EMPLOYEE';
+  const allowed = PERSONAS_FOR[userType] ?? ['ADMIN', 'STAFF'];
+  const personasToShow = PERSONA_ORDER.filter((p) => allowed.includes(p));
 
   return (
     <div className="shell">
@@ -50,7 +65,7 @@ export function AppShell() {
           tenant {activeTenantId?.slice(0, 8)}…
         </div>
 
-        {PERSONA_ORDER.map((persona) => {
+        {personasToShow.map((persona) => {
           const items = navPages.filter((p) => p.persona === persona);
           if (items.length === 0) return null;
           return (
