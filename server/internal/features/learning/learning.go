@@ -116,6 +116,38 @@ func (s *Service) AddMaterial(ctx context.Context, tenantID, actor, assignmentID
 	return id, err
 }
 
+// ListMaterials returns the materials attached to an assignment (read-only).
+func (s *Service) ListMaterials(ctx context.Context, tenantID, assignmentID uuid.UUID) ([]map[string]any, error) {
+	out := []map[string]any{}
+	err := s.engine.WithTenant(ctx, tenantID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx,
+			`SELECT id, title, kind, url, body FROM material
+			  WHERE assignment_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC`, assignmentID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id uuid.UUID
+			var title, kind string
+			var url, body *string
+			if err := rows.Scan(&id, &title, &kind, &url, &body); err != nil {
+				return err
+			}
+			m := map[string]any{"id": id, "title": title, "kind": kind}
+			if url != nil {
+				m["url"] = *url
+			}
+			if body != nil {
+				m["body"] = *body
+			}
+			out = append(out, m)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
 // ---- T3b: submission (append-only) -----------------------------------------------
 
 type SubmissionFile struct {
@@ -309,6 +341,20 @@ func Register(r chi.Router, pool *pgxpool.Pool, nodeID uuid.UUID, res *authz.Res
 		}
 		id, e := svc.AddMaterial(req.Context(), httpx.TenantID(req.Context()), actorID(req), aid, in.Title, in.Kind, in.StorageKey, in.URL, in.Body)
 		respond(w, "material_id", id, e)
+	})
+
+	r.With(manage).Get("/api/v1/learning/assignments/{id}/materials", func(w http.ResponseWriter, req *http.Request) {
+		aid, err := uuid.Parse(chi.URLParam(req, "id"))
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, "invalid assignment id")
+			return
+		}
+		list, err := svc.ListMaterials(req.Context(), httpx.TenantID(req.Context()), aid)
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"materials": list})
 	})
 
 	// Student self-service (no permission gate; the handler resolves the student).

@@ -87,6 +87,66 @@ func (s *Service) ListFeeHeads(ctx context.Context, tenantID uuid.UUID) ([]map[s
 	return out, err
 }
 
+// ListInvoices returns the most recent invoices (read-only, RLS-scoped).
+func (s *Service) ListInvoices(ctx context.Context, tenantID uuid.UUID) ([]map[string]any, error) {
+	out := []map[string]any{}
+	err := s.engine.WithTenant(ctx, tenantID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx,
+			`SELECT id, student_id, status, issued_at, due_date
+			   FROM invoice
+			  ORDER BY issued_at DESC LIMIT 200`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id, studentID uuid.UUID
+			var status string
+			var issuedAt any
+			var dueDate *string
+			if err := rows.Scan(&id, &studentID, &status, &issuedAt, &dueDate); err != nil {
+				return err
+			}
+			out = append(out, map[string]any{
+				"id": id, "student_id": studentID, "status": status,
+				"issued_at": issuedAt, "due_date": dueDate,
+			})
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+// ListPayments returns the most recent payments (read-only, RLS-scoped).
+func (s *Service) ListPayments(ctx context.Context, tenantID uuid.UUID) ([]map[string]any, error) {
+	out := []map[string]any{}
+	err := s.engine.WithTenant(ctx, tenantID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx,
+			`SELECT id, student_id, receipt_no, amount, method, status, paid_at
+			   FROM payment
+			  ORDER BY paid_at DESC LIMIT 200`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id, studentID uuid.UUID
+			var receiptNo, method, status string
+			var amount float64
+			var paidAt any
+			if err := rows.Scan(&id, &studentID, &receiptNo, &amount, &method, &status, &paidAt); err != nil {
+				return err
+			}
+			out = append(out, map[string]any{
+				"id": id, "student_id": studentID, "receipt_no": receiptNo,
+				"amount": amount, "method": method, "status": status, "paid_at": paidAt,
+			})
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
 // ---- invoice (DEBIT) -------------------------------------------------------------
 
 type InvoiceLine struct {
@@ -310,6 +370,24 @@ func Register(r chi.Router, pool *pgxpool.Pool, nodeID uuid.UUID, res *authz.Res
 			return
 		}
 		httpx.JSON(w, http.StatusOK, map[string]any{"fee_heads": list})
+	})
+
+	r.With(feeManage).Get("/api/v1/finance/invoices", func(w http.ResponseWriter, req *http.Request) {
+		list, err := svc.ListInvoices(req.Context(), httpx.TenantID(req.Context()))
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"invoices": list})
+	})
+
+	r.With(feeManage).Get("/api/v1/finance/payments", func(w http.ResponseWriter, req *http.Request) {
+		list, err := svc.ListPayments(req.Context(), httpx.TenantID(req.Context()))
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"payments": list})
 	})
 
 	r.With(feeManage).Post("/api/v1/finance/invoices", func(w http.ResponseWriter, req *http.Request) {

@@ -33,7 +33,7 @@ import (
 
 func main() {
 	ctx := context.Background()
-	cfg := config.FromEnv(":8081")
+	cfg := config.FromEnv(":8091")
 
 	// nodeID identifies this node for sync metadata (origin_node_id). Provisioning
 	// will assign a stable one at M6; for now it's per-process.
@@ -84,7 +84,7 @@ func main() {
 			slog.Error("seed tenant profile", "err", err)
 		}
 		// Minimal current academic year so sections/exams work out of the box (M5).
-		if err := academics.SeedDevAcademicYear(ctx, onboarding.NewEngine(pool, nodeID), devTenant); err != nil {
+		if err := academics.SeedDefaultAcademicYear(ctx, onboarding.NewEngine(pool, nodeID), devTenant); err != nil {
 			slog.Error("seed academic year", "err", err)
 		}
 	}

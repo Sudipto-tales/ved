@@ -98,6 +98,37 @@ type StudentDetail struct {
 	Guardians   []GuardianDTO   `json:"guardians"`
 }
 
+// GuardianRow is one entry in the guardian directory (admin record management). The
+// child_count is the number of live students linked via guardian_student.
+type GuardianRow struct {
+	ID              uuid.UUID `json:"id"`
+	Name            string    `json:"name"`
+	Phone           string    `json:"phone"`
+	Email           string    `json:"email,omitempty"`
+	RelationDefault string    `json:"relation_default"`
+	ChildCount      int       `json:"child_count"`
+}
+
+// GuardianChild is one student linked to a guardian, with the link attributes.
+type GuardianChild struct {
+	StudentID   uuid.UUID `json:"student_id"`
+	Name        string    `json:"name"`
+	AdmissionNo string    `json:"admission_no"`
+	Relation    string    `json:"relation"`
+	IsPrimary   bool      `json:"is_primary"`
+	CanPay      bool      `json:"can_pay"`
+}
+
+// GuardianDetail is the full guardian record + its linked children.
+type GuardianDetail struct {
+	ID         uuid.UUID       `json:"id"`
+	Name       string          `json:"name"`
+	Phone      string          `json:"phone"`
+	Email      string          `json:"email,omitempty"`
+	Occupation string          `json:"occupation,omitempty"`
+	Children   []GuardianChild `json:"children"`
+}
+
 var (
 	ErrNotFound     = errors.New("not found")
 	ErrDuplicateAdm = errors.New("admission number already exists")
@@ -356,6 +387,92 @@ func (s *Service) Get(ctx context.Context, tenantID, studentID uuid.UUID) (Stude
 	return d, err
 }
 
+// ListGuardians returns the tenant's guardian directory with a live-child count. RLS
+// scopes both guardian and guardian_student to the active tenant.
+func (s *Service) ListGuardians(ctx context.Context, tenantID uuid.UUID) ([]GuardianRow, error) {
+	out := []GuardianRow{}
+	err := s.repo.withTenant(ctx, tenantID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx,
+			`SELECT g.id, g.name, g.phone, g.email, g.relation_default,
+			        COUNT(gs.id) FILTER (WHERE gs.deleted_at IS NULL) AS child_count
+			   FROM guardian g
+			   LEFT JOIN guardian_student gs ON gs.guardian_id = g.id
+			  WHERE g.deleted_at IS NULL
+			  GROUP BY g.id, g.name, g.phone, g.email, g.relation_default
+			  ORDER BY g.name ASC LIMIT 500`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var r GuardianRow
+			var email, rel *string
+			if err := rows.Scan(&r.ID, &r.Name, &r.Phone, &email, &rel, &r.ChildCount); err != nil {
+				return err
+			}
+			if email != nil {
+				r.Email = *email
+			}
+			if rel != nil {
+				r.RelationDefault = *rel
+			}
+			out = append(out, r)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+// GetGuardian returns one guardian record + its linked children (RLS-scoped).
+func (s *Service) GetGuardian(ctx context.Context, tenantID, guardianID uuid.UUID) (GuardianDetail, error) {
+	var d GuardianDetail
+	err := s.repo.withTenant(ctx, tenantID, func(tx pgx.Tx) error {
+		var email, occ *string
+		err := tx.QueryRow(ctx,
+			`SELECT id, name, phone, email, occupation
+			   FROM guardian
+			  WHERE id = $1 AND deleted_at IS NULL`, guardianID).
+			Scan(&d.ID, &d.Name, &d.Phone, &email, &occ)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if email != nil {
+			d.Email = *email
+		}
+		if occ != nil {
+			d.Occupation = *occ
+		}
+
+		crows, err := tx.Query(ctx,
+			`SELECT s.id, s.admission_no, u.login_identifier, gs.relation, gs.is_primary, gs.can_pay
+			   FROM guardian_student gs
+			   JOIN student s     ON s.id = gs.student_id AND s.deleted_at IS NULL
+			   JOIN memberships m ON m.id = s.membership_id
+			   JOIN users u       ON u.id = m.user_id
+			  WHERE gs.guardian_id = $1 AND gs.deleted_at IS NULL
+			  ORDER BY u.login_identifier ASC`, guardianID)
+		if err != nil {
+			return err
+		}
+		defer crows.Close()
+		d.Children = []GuardianChild{}
+		for crows.Next() {
+			var c GuardianChild
+			var login string
+			if err := crows.Scan(&c.StudentID, &c.AdmissionNo, &login, &c.Relation, &c.IsPrimary, &c.CanPay); err != nil {
+				return err
+			}
+			c.Name = nameFromHandle(login)
+			d.Children = append(d.Children, c)
+		}
+		return crows.Err()
+	})
+	return d, err
+}
+
 // ---- HTTP ------------------------------------------------------------------------
 
 // Register mounts the students endpoints on an auth + tenant-scoped group; each route
@@ -402,6 +519,33 @@ func Register(r chi.Router, pool *pgxpool.Pool, nodeID uuid.UUID, res *authz.Res
 				return
 			}
 			httpx.JSON(w, http.StatusOK, map[string]any{"students": list})
+		})
+
+	// Guardian directory (record management). Registered before /students/{id} so the
+	// static "guardians" segment is matched ahead of the id param.
+	r.With(authz.Require(res, "student.read")).Get("/api/v1/students/guardians",
+		func(w http.ResponseWriter, req *http.Request) {
+			list, err := svc.ListGuardians(req.Context(), httpx.TenantID(req.Context()))
+			if err != nil {
+				httpx.Error(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			httpx.JSON(w, http.StatusOK, map[string]any{"guardians": list})
+		})
+
+	r.With(authz.Require(res, "student.read")).Get("/api/v1/students/guardians/{id}",
+		func(w http.ResponseWriter, req *http.Request) {
+			gid, err := uuid.Parse(chi.URLParam(req, "id"))
+			if err != nil {
+				httpx.Error(w, http.StatusBadRequest, "invalid guardian id")
+				return
+			}
+			d, err := svc.GetGuardian(req.Context(), httpx.TenantID(req.Context()), gid)
+			if err != nil {
+				writeErr(w, err)
+				return
+			}
+			httpx.JSON(w, http.StatusOK, d)
 		})
 
 	r.With(authz.Require(res, "student.read")).Get("/api/v1/students/{id}",

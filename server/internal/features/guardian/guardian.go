@@ -182,6 +182,79 @@ func Register(r chi.Router, pool *pgxpool.Pool, nodeID uuid.UUID, res *authz.Res
 			httpx.JSON(w, http.StatusOK, map[string]any{"summary": sum})
 		})
 
+	// Exams the school has defined — a flat list so the guardian's Marks screen can offer
+	// an exam to view. Tenant-scoped (RLS); not child-specific, but harmless metadata and
+	// gated by guardian.read_child like the rest of the portal reads.
+	r.With(authz.Require(res, "guardian.read_child")).Get("/api/v1/guardian/exams",
+		func(w http.ResponseWriter, req *http.Request) {
+			tenantID := httpx.TenantID(req.Context())
+			if _, err := svc.guardianID(req.Context(), tenantID, caller(req)); err != nil {
+				writeErr(w, err)
+				return
+			}
+			exams, err := svc.academics.ListExams(req.Context(), tenantID)
+			if err != nil {
+				httpx.Error(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			httpx.JSON(w, http.StatusOK, map[string]any{"exams": exams})
+		})
+
+	// Child marks for one exam — the effective (latest-per-subject) mark_entry rows,
+	// enriched with subject names. Verifies the (guardian, child) link + resolves the
+	// child's active enrollment, then reuses the academics service (never its tables).
+	r.With(authz.Require(res, "guardian.read_child")).Get("/api/v1/guardian/children/{childId}/marks",
+		func(w http.ResponseWriter, req *http.Request) {
+			tenantID := httpx.TenantID(req.Context())
+			gid, err := svc.guardianID(req.Context(), tenantID, caller(req))
+			if err != nil {
+				writeErr(w, err)
+				return
+			}
+			childID, err := uuid.Parse(chi.URLParam(req, "childId"))
+			if err != nil {
+				httpx.Error(w, http.StatusBadRequest, "invalid child id")
+				return
+			}
+			examID, err := uuid.Parse(req.URL.Query().Get("exam_id"))
+			if err != nil {
+				httpx.Error(w, http.StatusBadRequest, "valid exam_id query param required")
+				return
+			}
+			enrollment, err := svc.linkedEnrollment(req.Context(), tenantID, gid, childID)
+			if err != nil {
+				writeErr(w, err)
+				return
+			}
+			if enrollment == uuid.Nil {
+				httpx.JSON(w, http.StatusOK, map[string]any{"marks": []any{}, "note": "child not enrolled yet"})
+				return
+			}
+			marks, err := svc.academics.GetMarks(req.Context(), tenantID, examID, enrollment)
+			if err != nil {
+				httpx.Error(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			// Enrich subject_id → subject name (read-only academics lookup, RLS-scoped).
+			subjects, err := svc.academics.ListSubjects(req.Context(), tenantID)
+			if err != nil {
+				httpx.Error(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			names := map[string]string{}
+			for _, s := range subjects {
+				if n, ok := s["name"].(string); ok {
+					names[uuidKey(s["id"])] = n
+				}
+			}
+			for _, m := range marks {
+				if k := uuidKey(m["subject_id"]); k != "" {
+					m["subject_name"] = names[k]
+				}
+			}
+			httpx.JSON(w, http.StatusOK, map[string]any{"marks": marks})
+		})
+
 	r.With(authz.Require(res, "guardian.read_fees")).Get("/api/v1/guardian/children/{childId}/fees",
 		func(w http.ResponseWriter, req *http.Request) {
 			tenantID := httpx.TenantID(req.Context())
@@ -221,6 +294,22 @@ func caller(req *http.Request) uuid.UUID {
 		}
 	}
 	return uuid.Nil
+}
+
+// uuidKey normalises a UUID value to its canonical string regardless of how it arrives
+// from pgx: GetMarks scans into uuid.UUID, while listMaps' rows.Values() yields raw
+// [16]byte (no pgx-uuid type is registered on the pool). Returns "" if not a UUID.
+func uuidKey(v any) string {
+	switch t := v.(type) {
+	case uuid.UUID:
+		return t.String()
+	case [16]byte:
+		return uuid.UUID(t).String()
+	case string:
+		return t
+	default:
+		return ""
+	}
 }
 
 func writeErr(w http.ResponseWriter, err error) {

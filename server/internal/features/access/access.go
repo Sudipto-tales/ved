@@ -54,6 +54,26 @@ type MemberDTO struct {
 	RoleIDs      []uuid.UUID `json:"role_ids"`
 }
 
+// TenantProfileDTO is the read-only school/college profile (docs/database/03-tenant-setup).
+// The slug is immutable (drives login handles). Only a GET is wired here; editing the
+// mutable fields is part of the full tenant-setup slice that lands later.
+type TenantProfileDTO struct {
+	ID              uuid.UUID `json:"id"`
+	DisplayName     string    `json:"display_name"`
+	Slug            string    `json:"slug"`
+	InstitutionType string    `json:"institution_type"`
+}
+
+// AcademicYearDTO is a read-only academic-year row (the tenant-setup subset seeded for
+// academics). Creating/closing years is part of the full tenant-setup slice.
+type AcademicYearDTO struct {
+	ID        uuid.UUID `json:"id"`
+	Name      string    `json:"name"`
+	StartDate string    `json:"start_date"`
+	EndDate   string    `json:"end_date"`
+	IsCurrent bool      `json:"is_current"`
+}
+
 var (
 	ErrNotFound   = errors.New("not found")
 	ErrSystemRole = errors.New("system roles cannot be modified")
@@ -348,6 +368,49 @@ func (s *Service) ListMembers(ctx context.Context, tenantID uuid.UUID) ([]Member
 	return out, err
 }
 
+// GetTenantProfile returns this tenant's profile row (read-only). RLS scopes it to the
+// active tenant; the row is seeded at provisioning so it always exists.
+func (s *Service) GetTenantProfile(ctx context.Context, tenantID uuid.UUID) (TenantProfileDTO, error) {
+	var dto TenantProfileDTO
+	err := s.repo.withTenant(ctx, tenantID, func(tx pgx.Tx) error {
+		err := tx.QueryRow(ctx,
+			`SELECT id, display_name, slug, institution_type
+			   FROM tenant_profile
+			  WHERE deleted_at IS NULL
+			  LIMIT 1`).Scan(&dto.ID, &dto.DisplayName, &dto.Slug, &dto.InstitutionType)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	})
+	return dto, err
+}
+
+// ListAcademicYears returns the tenant's academic years, current first (read-only).
+func (s *Service) ListAcademicYears(ctx context.Context, tenantID uuid.UUID) ([]AcademicYearDTO, error) {
+	out := []AcademicYearDTO{}
+	err := s.repo.withTenant(ctx, tenantID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx,
+			`SELECT id, name, to_char(start_date, 'YYYY-MM-DD'), to_char(end_date, 'YYYY-MM-DD'), is_current
+			   FROM academic_year
+			  WHERE deleted_at IS NULL
+			  ORDER BY is_current DESC, start_date DESC`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var d AcademicYearDTO
+			if err := rows.Scan(&d.ID, &d.Name, &d.StartDate, &d.EndDate, &d.IsCurrent); err != nil {
+				return err
+			}
+			out = append(out, d)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
 // SetMemberRoles replaces the role set for a membership in one tx (outbox + audit).
 func (s *Service) SetMemberRoles(ctx context.Context, tenantID, actor, membershipID uuid.UUID, roleIDs []uuid.UUID) error {
 	return s.repo.withTenant(ctx, tenantID, func(tx pgx.Tx) error {
@@ -575,6 +638,29 @@ func Register(r chi.Router, pool *pgxpool.Pool, nodeID uuid.UUID, res *authz.Res
 			w.WriteHeader(http.StatusNoContent)
 		})
 	})
+
+	// Tenant-setup reads (school profile + academic years). Read-only for now — the
+	// full tenant-setup slice (editing profile, creating years/terms/dropdowns) lands
+	// later; these GETs let the admin setup screens display real data. Gated tenant.settings.
+	r.With(authz.Require(res, "tenant.settings")).Get("/api/v1/access/profile",
+		func(w http.ResponseWriter, req *http.Request) {
+			p, err := svc.GetTenantProfile(req.Context(), httpx.TenantID(req.Context()))
+			if err != nil {
+				writeErr(w, err)
+				return
+			}
+			httpx.JSON(w, http.StatusOK, p)
+		})
+
+	r.With(authz.Require(res, "tenant.settings")).Get("/api/v1/access/academic-years",
+		func(w http.ResponseWriter, req *http.Request) {
+			ys, err := svc.ListAcademicYears(req.Context(), httpx.TenantID(req.Context()))
+			if err != nil {
+				httpx.Error(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			httpx.JSON(w, http.StatusOK, map[string]any{"academic_years": ys})
+		})
 }
 
 // actorID is the caller's membership id in the active tenant (audit actor / created_by).

@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weloin/ved/internal/platform/authz"
@@ -331,11 +332,232 @@ func (s *Service) GetMarks(ctx context.Context, tenantID, examID, enrollmentID u
 	return out, err
 }
 
+// ---- Read-only list queries (over the existing mutable structure tables) ----------
+//
+// Plain SELECTs run inside engine.WithTenant so RLS scopes every row to the caller's
+// tenant (the pool connects as ved_app). They drive the academics setup screens.
+
+func (s *Service) listMaps(ctx context.Context, tenantID uuid.UUID, query string, cols []string, args ...any) ([]map[string]any, error) {
+	out := []map[string]any{}
+	err := s.engine.WithTenant(ctx, tenantID, func(tx pgx.Tx) error {
+		rows, err := tx.Query(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			vals, err := rows.Values()
+			if err != nil {
+				return err
+			}
+			m := make(map[string]any, len(cols))
+			for i, c := range cols {
+				m[c] = normalizeVal(vals[i])
+			}
+			out = append(out, m)
+		}
+		return rows.Err()
+	})
+	return out, err
+}
+
+// normalizeVal makes pgx's raw `rows.Values()` results JSON-safe: the pool registers no
+// uuid type, so uuid columns come back as [16]byte (which would JSON-encode as a number
+// array, breaking client-side ids/links) — convert them to canonical uuid strings; and
+// numerics come back as pgtype.Numeric — convert to a float.
+func normalizeVal(v any) any {
+	switch t := v.(type) {
+	case [16]byte:
+		return uuid.UUID(t).String()
+	case pgtype.Numeric:
+		if f, err := t.Float64Value(); err == nil && f.Valid {
+			return f.Float64
+		}
+		return nil
+	default:
+		return v
+	}
+}
+
+func (s *Service) ListPrograms(ctx context.Context, tenantID uuid.UUID) ([]map[string]any, error) {
+	return s.listMaps(ctx, tenantID,
+		`SELECT id, name, code, enrollment_mode, status FROM program
+		  WHERE deleted_at IS NULL ORDER BY name`,
+		[]string{"id", "name", "code", "enrollment_mode", "status"})
+}
+
+func (s *Service) ListStages(ctx context.Context, tenantID, programID uuid.UUID) ([]map[string]any, error) {
+	return s.listMaps(ctx, tenantID,
+		`SELECT id, name, ordinal FROM program_stage
+		  WHERE program_id=$1 AND deleted_at IS NULL ORDER BY ordinal`,
+		[]string{"id", "name", "ordinal"}, programID)
+}
+
+func (s *Service) ListAllStages(ctx context.Context, tenantID uuid.UUID) ([]map[string]any, error) {
+	return s.listMaps(ctx, tenantID,
+		`SELECT ps.id, ps.name, ps.ordinal, ps.program_id, p.name AS program_name
+		   FROM program_stage ps JOIN program p ON p.id = ps.program_id
+		  WHERE ps.deleted_at IS NULL ORDER BY p.name, ps.ordinal`,
+		[]string{"id", "name", "ordinal", "program_id", "program_name"})
+}
+
+func (s *Service) ListSubjects(ctx context.Context, tenantID uuid.UUID) ([]map[string]any, error) {
+	return s.listMaps(ctx, tenantID,
+		`SELECT id, name, code, kind FROM subject
+		  WHERE deleted_at IS NULL ORDER BY name`,
+		[]string{"id", "name", "code", "kind"})
+}
+
+func (s *Service) ListSections(ctx context.Context, tenantID uuid.UUID) ([]map[string]any, error) {
+	return s.listMaps(ctx, tenantID,
+		`SELECT sec.id, sec.name, sec.program_stage_id, sec.academic_year_id, sec.capacity,
+		        ps.name AS stage_name, p.name AS program_name
+		   FROM section sec
+		   JOIN program_stage ps ON ps.id = sec.program_stage_id
+		   JOIN program p        ON p.id  = ps.program_id
+		  WHERE sec.deleted_at IS NULL ORDER BY p.name, ps.ordinal, sec.name`,
+		[]string{"id", "name", "program_stage_id", "academic_year_id", "capacity", "stage_name", "program_name"})
+}
+
+func (s *Service) ListEnrollments(ctx context.Context, tenantID, sectionID uuid.UUID) ([]map[string]any, error) {
+	return s.listMaps(ctx, tenantID,
+		`SELECT e.id, e.student_id, e.roll_no, e.status, u.login_identifier
+		   FROM enrollment e
+		   JOIN student s     ON s.id = e.student_id
+		   JOIN memberships m ON m.id = s.membership_id
+		   JOIN users u       ON u.id = m.user_id
+		  WHERE e.section_id=$1 AND e.deleted_at IS NULL
+		  ORDER BY e.roll_no NULLS LAST, u.login_identifier`,
+		[]string{"id", "student_id", "roll_no", "status", "login_identifier"}, sectionID)
+}
+
+func (s *Service) ListTeachingAssignments(ctx context.Context, tenantID uuid.UUID) ([]map[string]any, error) {
+	return s.listMaps(ctx, tenantID,
+		`SELECT id, section_id, subject_id, teacher_id FROM teaching_assignment
+		  WHERE deleted_at IS NULL ORDER BY created_at DESC`,
+		[]string{"id", "section_id", "subject_id", "teacher_id"})
+}
+
+func (s *Service) ListExams(ctx context.Context, tenantID uuid.UUID) ([]map[string]any, error) {
+	return s.listMaps(ctx, tenantID,
+		`SELECT id, name, max_marks FROM exam
+		  WHERE deleted_at IS NULL ORDER BY created_at DESC`,
+		[]string{"id", "name", "max_marks"})
+}
+
+func (s *Service) ListCurriculum(ctx context.Context, tenantID, stageID uuid.UUID) ([]map[string]any, error) {
+	return s.listMaps(ctx, tenantID,
+		`SELECT c.id, c.subject_id, c.requirement, sub.name AS subject_name, sub.code AS subject_code
+		   FROM curriculum c JOIN subject sub ON sub.id = c.subject_id
+		  WHERE c.program_stage_id=$1 AND c.deleted_at IS NULL
+		  ORDER BY sub.name`,
+		[]string{"id", "subject_id", "requirement", "subject_name", "subject_code"}, stageID)
+}
+
+// StudentAcademics returns a per-student academics summary for the student profile:
+// the current enrollment (section + roll), the derived attendance tally (latest event
+// per day, summed), and the effective exam marks (latest per exam×subject). Empty when
+// the student isn't enrolled yet.
+func (s *Service) StudentAcademics(ctx context.Context, tenantID, studentID uuid.UUID) (map[string]any, error) {
+	out := map[string]any{"enrolled": false, "attendance": map[string]int{}, "marks": []map[string]any{}}
+	err := s.engine.WithTenant(ctx, tenantID, func(tx pgx.Tx) error {
+		var enrollment uuid.UUID
+		var section string
+		var roll, status *string
+		e := tx.QueryRow(ctx,
+			`SELECT e.id, sec.name, e.roll_no, e.status
+			   FROM enrollment e JOIN section sec ON sec.id = e.section_id
+			  WHERE e.student_id=$1 AND e.deleted_at IS NULL
+			  ORDER BY (e.status='ACTIVE') DESC, e.enrolled_at DESC LIMIT 1`, studentID).
+			Scan(&enrollment, &section, &roll, &status)
+		if errors.Is(e, pgx.ErrNoRows) {
+			return nil // not enrolled — return the empty shell
+		}
+		if e != nil {
+			return e
+		}
+		out["enrolled"] = true
+		out["enrollment_id"] = enrollment.String()
+		out["section_name"] = section
+		out["roll_no"] = roll
+		out["status"] = status
+
+		// Attendance: latest event per date, counted by status (derived, never stored).
+		att := map[string]int{"PRESENT": 0, "ABSENT": 0, "LATE": 0, "EXCUSED": 0, "TOTAL": 0}
+		arows, err := tx.Query(ctx,
+			`WITH latest AS (SELECT DISTINCT ON (date) date, status FROM attendance_event
+			   WHERE enrollment_id=$1 ORDER BY date, hlc DESC)
+			 SELECT status, count(*) FROM latest GROUP BY status`, enrollment)
+		if err != nil {
+			return err
+		}
+		for arows.Next() {
+			var st string
+			var n int
+			if err := arows.Scan(&st, &n); err != nil {
+				arows.Close()
+				return err
+			}
+			att[st] = n
+			att["TOTAL"] += n
+		}
+		arows.Close()
+		out["attendance"] = att
+
+		// Exam marks: latest entry per (exam, subject). (Assignment-sourced marks have a
+		// NULL exam_id and are shown in the LMS, not here.)
+		marks := []map[string]any{}
+		mrows, err := tx.Query(ctx,
+			`SELECT DISTINCT ON (me.exam_id, me.subject_id) ex.name, sub.name, me.marks, ex.max_marks
+			   FROM mark_entry me
+			   JOIN exam ex     ON ex.id = me.exam_id
+			   JOIN subject sub ON sub.id = me.subject_id
+			  WHERE me.enrollment_id=$1
+			  ORDER BY me.exam_id, me.subject_id, me.hlc DESC`, enrollment)
+		if err != nil {
+			return err
+		}
+		for mrows.Next() {
+			var exam, subject string
+			var m, max float64
+			if err := mrows.Scan(&exam, &subject, &m, &max); err != nil {
+				mrows.Close()
+				return err
+			}
+			marks = append(marks, map[string]any{"exam": exam, "subject": subject, "marks": m, "max_marks": max})
+		}
+		mrows.Close()
+		if err := mrows.Err(); err != nil {
+			return err
+		}
+		out["marks"] = marks
+		return nil
+	})
+	return out, err
+}
+
 // ---- HTTP ------------------------------------------------------------------------
 
 func Register(r chi.Router, pool *pgxpool.Pool, nodeID uuid.UUID, res *authz.Resolver) {
 	svc := NewService(pool, onboarding.NewEngine(pool, nodeID))
 	manage := authz.Require(res, "academics.manage")
+
+	// Student academics summary — gated student.read so the student profile page (also
+	// student.read) can show enrollment/attendance/marks.
+	r.With(authz.Require(res, "student.read")).Get("/api/v1/academics/students/{id}/academics",
+		func(w http.ResponseWriter, req *http.Request) {
+			sid, err := uuid.Parse(chi.URLParam(req, "id"))
+			if err != nil {
+				httpx.Error(w, http.StatusBadRequest, "invalid student id")
+				return
+			}
+			res, err := svc.StudentAcademics(req.Context(), httpx.TenantID(req.Context()), sid)
+			if err != nil {
+				httpx.Error(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			httpx.JSON(w, http.StatusOK, res)
+		})
 
 	r.With(manage).Post("/api/v1/academics/programs", func(w http.ResponseWriter, req *http.Request) {
 		var in struct{ Name, Code string }
@@ -421,6 +643,59 @@ func Register(r chi.Router, pool *pgxpool.Pool, nodeID uuid.UUID, res *authz.Res
 		respond(w, id, e)
 	})
 
+	// Read-only structure lists (drive the academics setup screens).
+	r.With(manage).Get("/api/v1/academics/programs", func(w http.ResponseWriter, req *http.Request) {
+		list, err := svc.ListPrograms(req.Context(), httpx.TenantID(req.Context()))
+		listResp(w, "programs", list, err)
+	})
+	r.With(manage).Get("/api/v1/academics/programs/{id}/stages", func(w http.ResponseWriter, req *http.Request) {
+		pid, err := uuid.Parse(chi.URLParam(req, "id"))
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, "invalid program id")
+			return
+		}
+		list, e := svc.ListStages(req.Context(), httpx.TenantID(req.Context()), pid)
+		listResp(w, "stages", list, e)
+	})
+	r.With(manage).Get("/api/v1/academics/program-stages", func(w http.ResponseWriter, req *http.Request) {
+		list, err := svc.ListAllStages(req.Context(), httpx.TenantID(req.Context()))
+		listResp(w, "stages", list, err)
+	})
+	r.With(manage).Get("/api/v1/academics/subjects", func(w http.ResponseWriter, req *http.Request) {
+		list, err := svc.ListSubjects(req.Context(), httpx.TenantID(req.Context()))
+		listResp(w, "subjects", list, err)
+	})
+	r.With(manage).Get("/api/v1/academics/sections", func(w http.ResponseWriter, req *http.Request) {
+		list, err := svc.ListSections(req.Context(), httpx.TenantID(req.Context()))
+		listResp(w, "sections", list, err)
+	})
+	r.With(manage).Get("/api/v1/academics/sections/{id}/enrollments", func(w http.ResponseWriter, req *http.Request) {
+		sid, err := uuid.Parse(chi.URLParam(req, "id"))
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, "invalid section id")
+			return
+		}
+		list, e := svc.ListEnrollments(req.Context(), httpx.TenantID(req.Context()), sid)
+		listResp(w, "enrollments", list, e)
+	})
+	r.With(manage).Get("/api/v1/academics/teaching-assignments", func(w http.ResponseWriter, req *http.Request) {
+		list, err := svc.ListTeachingAssignments(req.Context(), httpx.TenantID(req.Context()))
+		listResp(w, "teaching_assignments", list, err)
+	})
+	r.With(manage).Get("/api/v1/academics/exams", func(w http.ResponseWriter, req *http.Request) {
+		list, err := svc.ListExams(req.Context(), httpx.TenantID(req.Context()))
+		listResp(w, "exams", list, err)
+	})
+	r.With(manage).Get("/api/v1/academics/curriculum", func(w http.ResponseWriter, req *http.Request) {
+		sid, err := uuid.Parse(req.URL.Query().Get("program_stage_id"))
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, "invalid program_stage_id")
+			return
+		}
+		list, e := svc.ListCurriculum(req.Context(), httpx.TenantID(req.Context()), sid)
+		listResp(w, "curriculum", list, e)
+	})
+
 	// Append-only: attendance.
 	r.With(authz.Require(res, "attendance.mark")).Post("/api/v1/academics/attendance", func(w http.ResponseWriter, req *http.Request) {
 		var in struct {
@@ -494,6 +769,14 @@ func decode(w http.ResponseWriter, req *http.Request, v any) error {
 		return err
 	}
 	return nil
+}
+
+func listResp(w http.ResponseWriter, key string, list []map[string]any, err error) {
+	if err != nil {
+		writeErr(w, err)
+		return
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{key: list})
 }
 
 func respond(w http.ResponseWriter, id uuid.UUID, err error) {

@@ -12,13 +12,18 @@ import (
 	"github.com/weloin/ved/internal/platform/onboarding"
 )
 
-// SeedDevAcademicYear idempotently ensures the tenant has a current academic year so
-// sections/exams can be created out of the box (the full tenant-setup slice — multiple
-// years, terms, rooms — comes later). Golden rule on first insert.
-func SeedDevAcademicYear(ctx context.Context, engine *onboarding.Engine, tenantID uuid.UUID) error {
+// SeedDefaultAcademicYear idempotently ensures the tenant has a current academic year so
+// sections/exams can be created out of the box. Called both by the node dev seed and by
+// control-plane tenant provisioning (every provisioned school needs a current year; the
+// full tenant-setup slice — multiple years, terms, rooms — comes later). Golden rule on
+// first insert.
+func SeedDefaultAcademicYear(ctx context.Context, engine *onboarding.Engine, tenantID uuid.UUID) error {
 	return engine.WithTenant(ctx, tenantID, func(tx pgx.Tx) error {
 		var exists bool
-		err := tx.QueryRow(ctx, `SELECT true FROM academic_year WHERE is_current AND deleted_at IS NULL`).Scan(&exists)
+		// Filter tenant_id explicitly (defence-in-depth): control-plane provisioning runs
+		// as a superuser, which BYPASSES RLS — relying on app.tenant_id alone would match
+		// another tenant's current year and wrongly skip the insert.
+		err := tx.QueryRow(ctx, `SELECT true FROM academic_year WHERE tenant_id=$1 AND is_current AND deleted_at IS NULL`, tenantID).Scan(&exists)
 		if err == nil {
 			return nil // already have a current year
 		}

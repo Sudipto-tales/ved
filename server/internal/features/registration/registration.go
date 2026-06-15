@@ -30,6 +30,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/weloin/ved/internal/features/academics"
 	"github.com/weloin/ved/internal/features/access"
 	"github.com/weloin/ved/internal/features/platform"
 	"github.com/weloin/ved/internal/features/students"
@@ -37,6 +38,7 @@ import (
 	"github.com/weloin/ved/internal/platform/crypto"
 	"github.com/weloin/ved/internal/platform/httpx"
 	"github.com/weloin/ved/internal/platform/license"
+	"github.com/weloin/ved/internal/platform/onboarding"
 )
 
 var slugRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,30}$`)
@@ -210,6 +212,91 @@ func (s *Service) List(ctx context.Context) ([]RegistrationDTO, error) {
 			return nil, err
 		}
 		out = append(out, d)
+	}
+	return out, rows.Err()
+}
+
+// RegistrationDetail is a single registration plus its latest payment proof (if any) —
+// the data behind the platform registration-review detail page.
+type RegistrationDetail struct {
+	Registration RegistrationDTO `json:"registration"`
+	Proof        *ProofDTO       `json:"proof,omitempty"`
+}
+
+// ProofDTO is a payment proof as the review queue / proof detail pages display it.
+type ProofDTO struct {
+	ID             uuid.UUID  `json:"id"`
+	RegistrationID uuid.UUID  `json:"registration_id"`
+	SchoolName     string     `json:"school_name"`
+	Slug           string     `json:"slug"`
+	Amount         float64    `json:"amount"`
+	Currency       string     `json:"currency"`
+	Method         string     `json:"method"`
+	TxnID          string     `json:"txn_id"`
+	PayerName      *string    `json:"payer_name,omitempty"`
+	PaidAt         *time.Time `json:"paid_at,omitempty"`
+	StorageKey     *string    `json:"storage_key,omitempty"`
+	Status         string     `json:"status"`
+	RejectReason   *string    `json:"reject_reason,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+}
+
+// Detail loads one registration plus its most-recent payment proof — read-only, for the
+// platform review detail page.
+func (s *Service) Detail(ctx context.Context, regID uuid.UUID) (RegistrationDetail, error) {
+	var out RegistrationDetail
+	d := &out.Registration
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, school_name, slug, admin_name, admin_email, status, tenant_id, created_at,
+		        (SELECT pp.status FROM control_plane.payment_proof pp
+		          WHERE pp.registration_id = school_registration.id ORDER BY pp.created_at DESC LIMIT 1)
+		   FROM control_plane.school_registration WHERE id=$1`, regID).
+		Scan(&d.ID, &d.SchoolName, &d.Slug, &d.AdminName, &d.AdminEmail, &d.Status, &d.TenantID, &d.CreatedAt, &d.ProofStatus)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return RegistrationDetail{}, ErrNotFound
+	}
+	if err != nil {
+		return RegistrationDetail{}, err
+	}
+
+	var p ProofDTO
+	err = s.pool.QueryRow(ctx,
+		`SELECT id, registration_id, amount, currency, method, txn_id, payer_name, paid_at, storage_key, status, reject_reason, created_at
+		   FROM control_plane.payment_proof
+		  WHERE registration_id=$1 ORDER BY created_at DESC LIMIT 1`, regID).
+		Scan(&p.ID, &p.RegistrationID, &p.Amount, &p.Currency, &p.Method, &p.TxnID, &p.PayerName, &p.PaidAt, &p.StorageKey, &p.Status, &p.RejectReason, &p.CreatedAt)
+	if err == nil {
+		p.SchoolName = d.SchoolName
+		p.Slug = d.Slug
+		out.Proof = &p
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return RegistrationDetail{}, err
+	}
+	return out, nil
+}
+
+// ListProofs returns pending payment proofs joined to their registration — the payment
+// review queue. Read-only.
+func (s *Service) ListProofs(ctx context.Context) ([]ProofDTO, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT pp.id, pp.registration_id, r.school_name, r.slug, pp.amount, pp.currency, pp.method,
+		        pp.txn_id, pp.payer_name, pp.paid_at, pp.storage_key, pp.status, pp.reject_reason, pp.created_at
+		   FROM control_plane.payment_proof pp
+		   JOIN control_plane.school_registration r ON r.id = pp.registration_id
+		  WHERE pp.status = 'PENDING'
+		  ORDER BY pp.created_at DESC LIMIT 200`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ProofDTO{}
+	for rows.Next() {
+		var p ProofDTO
+		if err := rows.Scan(&p.ID, &p.RegistrationID, &p.SchoolName, &p.Slug, &p.Amount, &p.Currency, &p.Method,
+			&p.TxnID, &p.PayerName, &p.PaidAt, &p.StorageKey, &p.Status, &p.RejectReason, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
 	}
 	return out, rows.Err()
 }
@@ -438,6 +525,11 @@ func provisionTenantPlane(ctx context.Context, pool *pgxpool.Pool, nodeID, tenan
 	if err := students.SeedTenantProfile(ctx, students.NewRepo(pool, nodeID), tenantID, slug, adminName+"'s School"); err != nil {
 		return "", "", err
 	}
+	// Every provisioned school needs a current academic year before it can create
+	// sections/exams (full tenant-setup — terms/rooms/multiple years — comes later).
+	if err := academics.SeedDefaultAcademicYear(ctx, onboarding.NewEngine(pool, nodeID), tenantID); err != nil {
+		return "", "", err
+	}
 	return handle, tempPass, nil
 }
 
@@ -445,6 +537,64 @@ func provisionTenantPlane(ctx context.Context, pool *pgxpool.Pool, nodeID, tenan
 
 // RegisterPublic mounts the unauthenticated self-service endpoints.
 func RegisterPublic(r chi.Router, svc *Service) {
+	// Public plan catalog — drives the signup site's plan picker.
+	r.Get("/api/v1/plans", func(w http.ResponseWriter, req *http.Request) {
+		rows, err := svc.pool.Query(req.Context(),
+			`SELECT id, name, tier, currency, price, billing_cycle, seats, enabled_modules
+			   FROM control_plane.plan_catalog WHERE is_active ORDER BY price`)
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		defer rows.Close()
+		type plan struct {
+			ID             uuid.UUID       `json:"id"`
+			Name           string          `json:"name"`
+			Tier           string          `json:"tier"`
+			Currency       string          `json:"currency"`
+			Price          float64         `json:"price"`
+			BillingCycle   string          `json:"billing_cycle"`
+			Seats          int             `json:"seats"`
+			EnabledModules json.RawMessage `json:"enabled_modules"`
+		}
+		out := []plan{}
+		for rows.Next() {
+			var p plan
+			if err := rows.Scan(&p.ID, &p.Name, &p.Tier, &p.Currency, &p.Price, &p.BillingCycle, &p.Seats, &p.EnabledModules); err != nil {
+				httpx.Error(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			out = append(out, p)
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"plans": out})
+	})
+
+	// Public read of a registration's status (signup site polls this).
+	r.Get("/api/v1/registrations/{id}", func(w http.ResponseWriter, req *http.Request) {
+		id, err := uuid.Parse(chi.URLParam(req, "id"))
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, "invalid id")
+			return
+		}
+		var dto RegistrationDTO
+		var proof *string
+		err = svc.pool.QueryRow(req.Context(),
+			`SELECT r.id, r.school_name, r.slug, r.admin_name, r.admin_email, r.status, r.tenant_id, r.created_at,
+			        (SELECT pp.status FROM control_plane.payment_proof pp WHERE pp.registration_id=r.id ORDER BY pp.created_at DESC LIMIT 1)
+			   FROM control_plane.school_registration r WHERE r.id=$1`, id).
+			Scan(&dto.ID, &dto.SchoolName, &dto.Slug, &dto.AdminName, &dto.AdminEmail, &dto.Status, &dto.TenantID, &dto.CreatedAt, &proof)
+		if errors.Is(err, pgx.ErrNoRows) {
+			httpx.Error(w, http.StatusNotFound, "not found")
+			return
+		}
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		dto.ProofStatus = proof
+		httpx.JSON(w, http.StatusOK, dto)
+	})
+
 	r.Post("/api/v1/register", func(w http.ResponseWriter, req *http.Request) {
 		var in RegisterInput
 		if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
@@ -488,6 +638,31 @@ func RegisterPlatform(r chi.Router, svc *Service) {
 				return
 			}
 			httpx.JSON(w, http.StatusOK, map[string]any{"registrations": list})
+		})
+
+	r.With(platform.RequirePermission(platform.PermRegistrationReview)).
+		Get("/api/v1/platform/registrations/{id}", func(w http.ResponseWriter, req *http.Request) {
+			id, err := uuid.Parse(chi.URLParam(req, "id"))
+			if err != nil {
+				httpx.Error(w, http.StatusBadRequest, "invalid id")
+				return
+			}
+			detail, err := svc.Detail(req.Context(), id)
+			if err != nil {
+				writeErr(w, err)
+				return
+			}
+			httpx.JSON(w, http.StatusOK, detail)
+		})
+
+	r.With(platform.RequirePermission(platform.PermPaymentReview)).
+		Get("/api/v1/platform/payment-proofs", func(w http.ResponseWriter, req *http.Request) {
+			list, err := svc.ListProofs(req.Context())
+			if err != nil {
+				httpx.Error(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			httpx.JSON(w, http.StatusOK, map[string]any{"payment_proofs": list})
 		})
 
 	r.With(platform.RequirePermission(platform.PermPaymentReview)).
