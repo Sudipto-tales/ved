@@ -15,8 +15,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -24,6 +22,7 @@ import (
 
 	"github.com/weloin/ved/internal/platform/credential"
 	"github.com/weloin/ved/internal/platform/crypto"
+	"github.com/weloin/ved/internal/platform/hlc"
 )
 
 var (
@@ -184,5 +183,8 @@ func (e *Engine) WriteEventAndAudit(ctx context.Context, tx pgx.Tx, tenantID uui
 	return nil
 }
 
-// NowHLC is the placeholder Hybrid Logical Clock shared by onboarding writes (real HLC at M6).
-func NowHLC() string { return strconv.FormatInt(time.Now().UnixNano(), 10) }
+// NowHLC returns a fresh Hybrid Logical Clock stamp shared by an aggregate's onboarding
+// writes (docs/08 pillar 5). It delegates to the process-global clock (hlc.SetNode is
+// called at node startup with the node id), so every write is causally ordered and stamps
+// compare correctly across nodes during sync.
+func NowHLC() string { return hlc.Now() }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/weloin/ved/internal/features/academics"
 	"github.com/weloin/ved/internal/features/access"
+	"github.com/weloin/ved/internal/features/configsync"
 	"github.com/weloin/ved/internal/features/finance"
 	"github.com/weloin/ved/internal/features/guardian"
 	"github.com/weloin/ved/internal/features/health"
@@ -25,6 +26,7 @@ import (
 	"github.com/weloin/ved/internal/platform/bus"
 	"github.com/weloin/ved/internal/platform/config"
 	"github.com/weloin/ved/internal/platform/db"
+	"github.com/weloin/ved/internal/platform/hlc"
 	"github.com/weloin/ved/internal/platform/httpx"
 	"github.com/weloin/ved/internal/platform/migrate"
 	"github.com/weloin/ved/internal/platform/onboarding"
@@ -38,6 +40,9 @@ func main() {
 	// nodeID identifies this node for sync metadata (origin_node_id). Provisioning
 	// will assign a stable one at M6; for now it's per-process.
 	nodeID := uuid.Must(uuid.NewV7())
+	// Bind the process-global HLC to this node so every write is causally stamped and
+	// sync stamps compare correctly across nodes (docs/08 pillar 5).
+	hlc.SetNode(nodeID)
 
 	slog.Info("running migrations")
 	if err := migrate.Up(ctx, cfg.DatabaseURL); err != nil {
@@ -106,6 +111,13 @@ func main() {
 			defer relayPool.Close()
 			go syncrelay.NewRelay(relayPool, b).Run(ctx)
 			slog.Info("sync relay started", "nats", cfg.NATSURL)
+		}
+		// Cloud→node config push-down (M6): apply license/tenant-config snapshots the
+		// control plane pushes. Uses the RLS-scoped app pool; idempotent via the inbox.
+		if _, err := configsync.Start(ctx, b, pool, configsync.DefaultRegistry); err != nil {
+			slog.Warn("config sync start", "err", err)
+		} else {
+			slog.Info("config sync consumer started", "nats", cfg.NATSURL)
 		}
 	}
 

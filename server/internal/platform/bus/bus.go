@@ -12,11 +12,20 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// StreamName is the single JetStream stream carrying every tenant's events.
+// StreamName carries node→cloud business events (tenant.<id>.<aggregate>.<op>).
 const StreamName = "VED_EVENTS"
 
-// SubjectAll matches every tenant subject (tenant.<id>.<aggregate>.<op>).
+// ConfigStreamName carries cloud→node config push-down (cloud.<id>.<aggregate>.<op>):
+// license/tenant-config/catalog updates flowing the OTHER direction (docs/08 "what flows
+// which way"). Kept a SEPARATE stream so the two directions have independent retention and
+// consumer cursors and never cross-deliver.
+const ConfigStreamName = "VED_CONFIG"
+
+// SubjectAll matches every node→cloud tenant subject.
 const SubjectAll = "tenant.>"
+
+// ConfigSubjectAll matches every cloud→node config subject.
+const ConfigSubjectAll = "cloud.>"
 
 // Bus wraps a NATS connection + JetStream context.
 type Bus struct {
@@ -44,22 +53,30 @@ func Connect(url string) (*Bus, error) {
 	return &Bus{nc: nc, js: js}, nil
 }
 
-// EnsureStream creates the durable events stream if it does not exist (idempotent).
+// EnsureStream creates the node→cloud events stream if it does not exist (idempotent).
 func (b *Bus) EnsureStream() error {
-	_, err := b.js.StreamInfo(StreamName)
-	if err == nil {
+	return b.ensureStream(StreamName, SubjectAll)
+}
+
+// EnsureConfigStream creates the cloud→node config stream if it does not exist (idempotent).
+func (b *Bus) EnsureConfigStream() error {
+	return b.ensureStream(ConfigStreamName, ConfigSubjectAll)
+}
+
+func (b *Bus) ensureStream(name, subject string) error {
+	if _, err := b.js.StreamInfo(name); err == nil {
 		return nil
 	}
-	_, err = b.js.AddStream(&nats.StreamConfig{
-		Name:       StreamName,
-		Subjects:   []string{SubjectAll},
+	_, err := b.js.AddStream(&nats.StreamConfig{
+		Name:       name,
+		Subjects:   []string{subject},
 		Storage:    nats.FileStorage,
 		Retention:  nats.LimitsPolicy,
 		MaxAge:     30 * 24 * time.Hour, // durable per-tenant history window
 		Duplicates: 10 * time.Minute,    // server-side MsgId dedup window
 	})
 	if err != nil {
-		return fmt.Errorf("add stream: %w", err)
+		return fmt.Errorf("add stream %s: %w", name, err)
 	}
 	return nil
 }

@@ -111,7 +111,11 @@ type Tenant struct {
 func NewTenant(t *testing.T, pool *pgxpool.Pool, nodeID uuid.UUID) Tenant {
 	t.Helper()
 	id := uuid.Must(uuid.NewV7())
-	slug := "test-" + strings.ReplaceAll(id.String(), "-", "")[:12]
+	// Use the RANDOM tail of the UUID, not the leading 12 hex chars: in UUIDv7 the first 48
+	// bits are the millisecond timestamp, so a [:12] slug collides for tenants minted in the
+	// same ms (globally — tenant_profile.slug is unique across the shared test DB).
+	hex := strings.ReplaceAll(id.String(), "-", "")
+	slug := "test-" + hex[len(hex)-12:]
 
 	ctx := context.Background()
 	err := InTenant(ctx, pool, id, func(tx pgx.Tx) error {

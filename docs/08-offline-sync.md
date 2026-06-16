@@ -167,11 +167,25 @@ single binary. Alternatives evaluated:
 
 ## Implementation order (slots into [07 — Roadmap](./07-roadmap.md) Phase 6)
 
-1. Add `outbox`, `inbox`, `hlc`, `origin_node_id`, `version`, tombstone columns to the
+1. ✅ Add `outbox`, `inbox`, `hlc`, `origin_node_id`, `version`, tombstone columns to the
    schema; switch synced PKs to UUIDv7. **Do this early** even while cloud-only — it's
-   cheap now and a rewrite later.
-2. Node provisioning: issue cert + license + `node_id`; mTLS handshake with cloud.
-3. Relay worker (outbox → JetStream) + consumer (JetStream → inbox) both directions.
-4. Conflict merge (HLC LWW) + event-sourced ledgers + tombstone handling.
-5. Snapshot + replay bootstrap; DR drill (kill a node, rebuild from cloud).
-6. Local WAL archiving / backups on the node.
+   cheap now and a rewrite later. *(Done from migration #1, M0.)*
+2. ⬜ Node provisioning: issue cert + license + `node_id`; mTLS handshake with cloud.
+   *(License issuance done at M4; mTLS + per-tenant NATS accounts deferred — infra.)*
+3. ✅ Relay worker (outbox → JetStream) + consumer (JetStream → inbox) **both directions**.
+   *(Node→cloud relay + durable hub; cloud→node `cp_outbox` relay + node `configsync`
+   consumer on the `VED_CONFIG` / `cloud.>` stream.)*
+4. ✅ Conflict merge (HLC LWW) + event-sourced ledgers + tombstone handling.
+   *(Real HLC in `internal/platform/hlc`; row-level LWW + tombstone applier in
+   `internal/platform/sync/merge.go`; append-only ledgers from M5. Per-FIELD LWW — a clock
+   per column — is a future refinement; row-level suffices while schools are single-writer.)*
+5. ⬜ Snapshot + replay bootstrap; DR drill (kill a node, rebuild from cloud).
+   *(The cloud history `control_plane.sync_event` is the replay source; bootstrap tooling +
+   the drill are deferred.)*
+6. ⬜ Local WAL archiving / backups on the node. *(Ops/deployment — pgBackRest.)*
+
+> Offline license-grace (docs/01): the state machine + node-held `Guard`
+> (`internal/platform/license/{grace,guard}.go`) are implemented & unit-tested
+> (ACTIVE → GRACE → LOCKED by expiry + grace days, evaluated offline). The cloud pushes a
+> fresh license down the path in (3); wiring the `Guard` as a mutation-gate is the one
+> remaining step (needs a long-dated dev license seeded first).

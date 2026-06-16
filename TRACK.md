@@ -21,8 +21,11 @@ The single place that records **how far the build has progressed** against the p
 > by trigger; student can't create/grade (403), non-student can't submit (403). FE: teacher
 > Assignments + grading screens, `tsc`/build clean. **The roadmap is complete (M0–M8).**
 > _Carried-forward (post-roadmap polish): LMS T3c (quizzes/discussion), lesson plans,
-> MinIO blob upload, student/guardian LMS FE; plus the standing items — platform SPA,
-> academics setup FE, OpenAPI specs, DB-integration tests, M6 hardening (HLC-merge/mTLS/DR)._
+> MinIO blob upload, student/guardian LMS FE; academics setup FE. **M6 is now
+> code-complete** — pillars 1–5 (real HLC + LWW/tombstone merge), bidirectional cloud→node
+> push-down, and the offline license-grace state machine all landed & tested; only the
+> infra items remain (mTLS / per-tenant NATS accounts / WAL archiving / DR drill) plus
+> wiring the license guard as a mutation-gate._
 
 > **(prev) M7 (Guardian Portal) — complete and verified** — child-scoped read
 > access on top of RLS. Per docs/18 the guardian is *an actor + a portal, not a slice*:
@@ -192,8 +195,8 @@ rebuilt. Roadmap (P0–P6) in [docs/22](./docs/22-frontend.md); tokens in [docs/
 | **M3** Onboarding + Students | credential gen, onboarding engine, first real domain slice | ✅ verified (student.onboard tx + credential gen + roster/detail; notes retired) |
 | **M4** Control Plane | registration state machine, payment-proof, licensing | ✅ verified — backend + **platform SPA** (login, registrations review/approve, tenants, licenses) |
 | **M5** Teachers/Staff/Academics/Finance | replicate the M3 shape across slices | ✅ verified (teachers, staff, academics, finance; append-only ledgers DB-enforced) |
-| **M6** Sync & Offline | NATS relay + inbox + HLC; wiring, not rewrite | 🟡 core verified (relay → JetStream → idempotent durable hub + offline replay); HLC-merge/mTLS/DR deferred |
-| **M7** Guardian Portal & Mobile | child-scoped read API; Expo read-heavy | 🟡 portal verified (child-scoped read API + promote + FE); Expo mobile + T2 writes ⬜ |
+| **M6** Sync & Offline | NATS relay + inbox + HLC; wiring, not rewrite | ✅ code-complete (pillars 1–5: real HLC + row-level LWW/tombstone merge, bidirectional cloud→node push-down, offline license-grace state machine); mTLS/per-tenant accounts/WAL = infra, deferred |
+| **M7** Guardian Portal & Mobile | child-scoped read API; Expo read-heavy | ✅ portal + **T2 guarded writes** (pay/leave/contact + maker-checker) + **Expo mobile read app** (login → children → attendance/marks/fees, `tsc` clean) |
 | **M8** LMS | content → assignments → submission/grading | ✅ verified (T3a+T3b: assignments/materials → submit → grade → marks; append-only; T3c deferred) |
 
 ---
@@ -418,28 +421,45 @@ foreign-tenant 0.
 **Carried-forward:** academics setup/attendance FE; fee structures/schedules/concessions/
 fines; COURSE_BASED mode; timetable; full tenant-setup slice (terms, rooms, dropdowns).
 
-## Backend — `server/` (M6 Sync & Offline) — 🟡 core verified
+## Backend — `server/` (M6 Sync & Offline) — ✅ code-complete (pillars 1–5)
 
 Local-first by WIRING the existing outbox to JetStream — no rewrite (every write has
-routed through the outbox since M0).
+routed through the outbox since M0). Core (pillars 1–4) was verified live earlier; this pass
+adds the remaining code pillars (real HLC, conflict merge, the reverse sync direction, and
+the offline license state machine).
 
 | Component | File(s) | Status |
 |---|---|---|
-| NATS JetStream transport kernel (connect, ensure stream, publish w/ MsgId, durable subscribe) | `internal/platform/bus/bus.go` | ✅ |
+| NATS JetStream transport kernel (connect, ensure stream, publish w/ MsgId, durable subscribe) | `internal/platform/bus/bus.go` | ✅ + config stream `VED_CONFIG` (`cloud.>`) |
 | Sync envelope + subject scheme `tenant.<id>.<aggregate>.<op>` | `internal/platform/sync/sync.go` | ✅ |
 | Relay worker: unsent outbox → JetStream → mark sent (owner conn, spans tenants; at-least-once) | `internal/platform/sync/sync.go` | ✅ |
 | Cloud durable history store + idempotent inbox (PK on event_id) | `db/cpmigrations/00002_sync.sql` (`control_plane.sync_event`) | ✅ applied |
 | Sync hub: durable consumer `tenant.>` → idempotent apply | `internal/features/synchub/synchub.go` | ✅ |
-| Wiring: relay in `cmd/node`, hub in `cmd/controlplane` (both NATS-down tolerant) | `cmd/*/main.go` | ✅ |
+| **Real Hybrid Logical Clock** (wall-ms + counter + node, monotonic `Now`, `Update` on receive, lexicographically-sortable encoding, `Compare` tolerant of legacy nanos) | `internal/platform/hlc/hlc.go` | ✅ + unit tests (replaces the M1–M5 `NowHLC` placeholder) |
+| **Pillar 5 — conflict resolution:** pure LWW + tombstone decision (`Resolve`) + generic full-row applier (`ApplyRow`, row-level LWW, tombstone, resurrection, SQL-ident guarded) | `internal/platform/sync/merge.go` | ✅ + unit + integration tests |
+| **Bidirectional cloud→node push-down:** cloud `cp_outbox` + cloud relay (`cloud.<id>.*`) + node idempotent inbox apply (`ApplyConfigEvent`, registry-driven) + node durable consumer | `db/cpmigrations/00003_config_outbox.sql`, `internal/platform/sync/{cloudrelay,inbox}.go`, `internal/features/configsync/configsync.go` | ✅ + integration tests |
+| **Offline license-grace state machine** (`Evaluate` ACTIVE/GRACE/LOCKED from expiry+grace; thread-safe `Guard` the node holds) | `internal/platform/license/{grace,guard}.go` | ✅ + unit tests |
+| Wiring: relay + config consumer in `cmd/node`; hub + cloud relay in `cmd/controlplane`; `hlc.SetNode` at node startup (all NATS-down tolerant) | `cmd/*/main.go` | ✅ |
 
-**Live verification (real JetStream):** relay drained the 54-event M1–M5 backlog into the
-cloud history + marked outbox sent; fresh onboard flowed end-to-end (+1); re-armed event
-republished with **no duplicate** (MsgId + PK dedup); **offline replay** — hub down → node
-kept producing (buffered in JetStream) → hub restart resumed its durable cursor and applied
-the buffered event. Pillars 1–4 live.
-**Carried-forward:** pillar 5 (per-field HLC LWW merge for mutable rows + tombstone apply);
-mTLS + per-tenant NATS accounts; cloud→node config push-down; snapshot/replay bootstrap +
-DR drill; local WAL archiving; offline license-grace lock.
+**Verification.**
+- *Live (earlier, real JetStream):* relay drained the 54-event M1–M5 backlog into the cloud
+  history + marked outbox sent; fresh onboard flowed end-to-end; re-armed event republished
+  with **no duplicate** (MsgId + PK dedup); **offline replay** — hub down → node buffered in
+  JetStream → hub restart resumed its durable cursor. Pillars 1–4.
+- *This pass (automated):* HLC monotonic under a stalled/backwards wall clock + receive-rule
+  + legacy/new `Compare` (unit); LWW merge against the real `note` table — newer wins, stale
+  no-op, delete tombstones, newer write resurrects, stale delete can't bury a live row
+  (integration); cloud→node `tenant_profile` snapshot apply — newer wins, **redelivery is an
+  inbox no-op**, out-of-order older loses (integration); license grace phase boundaries +
+  zero-grace + empty-guard-locked (unit). `go build`/`vet`/`gofmt` clean; full integration
+  suite (all 10 slices + sync/hlc/license) green. *(Fixed a latent test-harness flake:
+  `testdb.NewTenant` slugged the UUIDv7 timestamp prefix, colliding within a millisecond —
+  now uses the random tail.)*
+**Deferred (infra/ops, not code):** mTLS + per-tenant NATS accounts; snapshot/replay
+bootstrap + DR drill; local WAL archiving (pgBackRest). **License enforcement seam:** the
+grace `Guard` is built + tested but not yet wired as a mutation-gate middleware (would need
+the dev node seeded with a long-dated dev license first, else it self-locks) — the mechanism
+is ready; flipping it on is a one-line gate + dev-license seed.
 
 ## Backend — `server/` (M7 Guardian Portal) — ✅ verified
 

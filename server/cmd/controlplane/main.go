@@ -21,6 +21,7 @@ import (
 	"github.com/weloin/ved/internal/platform/httpx"
 	"github.com/weloin/ved/internal/platform/license"
 	"github.com/weloin/ved/internal/platform/migrate"
+	syncrelay "github.com/weloin/ved/internal/platform/sync"
 
 	"github.com/google/uuid"
 )
@@ -74,6 +75,14 @@ func main() {
 			slog.Error("sync hub start", "err", err)
 		} else {
 			slog.Info("sync hub started", "nats", cfg.NATSURL)
+		}
+		// Cloud→node config push-down (M6): relay control_plane.cp_outbox to the config
+		// stream for the owning nodes to apply. Owner pool (control plane has no RLS).
+		if err := b.EnsureConfigStream(); err != nil {
+			slog.Warn("cloud relay: ensure config stream", "err", err)
+		} else {
+			go syncrelay.NewCloudRelay(pool, b).Run(ctx)
+			slog.Info("cloud relay started", "nats", cfg.NATSURL)
 		}
 	}
 
