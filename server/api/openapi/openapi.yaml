@@ -162,6 +162,14 @@ paths:
     $ref: './paths/guardian.yaml#/ChildMarks'
   /api/v1/guardian/children/{childId}/fees:
     $ref: './paths/guardian.yaml#/ChildFees'
+  /api/v1/guardian/children/{childId}/pay:
+    $ref: './paths/guardian.yaml#/PayFees'
+  /api/v1/guardian/children/{childId}/leave:
+    $ref: './paths/guardian.yaml#/RequestLeave'
+  /api/v1/guardian/leave-requests:
+    $ref: './paths/guardian.yaml#/MyLeaveRequests'
+  /api/v1/guardian/contact:
+    $ref: './paths/guardian.yaml#/UpdateOwnContact'
 
 components:
   securitySchemes:

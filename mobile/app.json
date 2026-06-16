@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "VED Guardian",
+    "slug": "ved-guardian",
+    "scheme": "vedguardian",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "splash": {
+      "backgroundColor": "#0F172A"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": { "supportsTablet": true },
+    "android": {
+      "package": "com.weloin.vedguardian"
+    },
+    "extra": {
+      "defaultServerUrl": "http://10.0.2.2:8091"
+    }
+  }
+}

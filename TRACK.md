@@ -480,9 +480,57 @@ enforced at the query layer (guardian_student) AND by RLS.
 sees only their 1 linked child; own child fees (outstanding 3000) + attendance 200;
 **foreign child → 403** (fees & attendance); non-guardian admin → 403; guardian → staff
 `/students` 403.
-**Carried-forward:** Tier-2 guarded writes (online fee pay via gateway, leave requests,
-contact update via maker-checker); child marks/timetable reads; the Expo mobile app
-(read-heavy, reuses this API + generated client).
+
+### M7 Tier-2 guarded writes — ✅ verified
+
+The "view dues → act" half of the portal (docs/18 Tier 2). Scoped per the earlier
+decision: **simulated** online payment (no real gateway locally) + **minimal per-feature**
+maker-checker (two small request tables, not a generic framework).
+
+| Component | File(s) | Status |
+|---|---|---|
+| Migration: `leave_request` + `contact_change_request` (mutable status tables, RLS, base/sync cols) | `db/migrations/00012_guardian_t2.sql` | ✅ applied |
+| `guardian.pay_fees` added to the seeded Guardian role | `internal/platform/authz/catalog.go` | ✅ |
+| `PayFees` — simulated pay → reuses `finance.RecordPayment` (gapless receipt + CREDIT), gated by child link **AND `can_pay`** | `internal/features/guardian/guardian.go` | ✅ golden rule (via finance) |
+| `RequestLeave` / `UpdateOwnContact` — PENDING request + outbox + audit in one tx; child-scoped / self-scoped | same | ✅ golden rule |
+| Staff side: `PendingLeave`/`DecideLeave` (gated `attendance.mark`), `PendingContact`/`DecideContact` (gated `student.update`) — **approve applies** the contact change to the guardian record in the same tx | same | ✅ |
+| OpenAPI: 4 new guardian ops (`payChildFees`/`requestChildLeave`/`listMyLeaveRequests`/`requestContactChange`) + regen TS client | `server/api/openapi/paths/guardian.yaml`, `web/src/shared/api/generated/` | ✅ |
+| Frontend: PayFees / LeaveRequest / Contact pages rewired from scaffolds to the real generated mutations | `web/src/features/guardians/pages/` | ✅ |
+| Integration tests (live PG) | `internal/features/guardian/t2_integration_test.go` | ✅ pass |
+
+**Verification:** integration suite green — request_leave golden rule (1 outbox + 1 audit) +
+foreign-child rejected on the **write** path; pay_fees writes one CREDIT and a non-paying
+guardian is rejected by `can_pay`; contact-change **approve applies** the new phone to the
+guardian record (maker-checker); a re-decision of a settled row is a no-op (`ErrNotFound`).
+`go build`/`vet`/`gofmt` clean; web `tsc -b` + `vite build` clean; new routes live on the
+node (401 gated, not 404).
+### M7 Expo mobile — ✅ runnable read app
+
+The read-heavy guardian app (docs/07 "mobile read-first"), built from scratch in `mobile/`.
+**Expo SDK 51 + React Native + TypeScript**, React Navigation (native-stack), TanStack
+Query, `expo-secure-store` for the session. It reuses the node's guardian read-API directly
+(native apps skip the subdomain gateway, so the client names the tenant with the
+`X-Tenant-Slug` header — the same header nginx injects on web).
+
+| Component | File(s) | Status |
+|---|---|---|
+| HTTP seam (Bearer + `X-Tenant-Slug`; cross-tenant `login()`) | `mobile/src/api/client.ts` | ✅ |
+| Typed guardian reads + react-query hooks (children/attendance/marks/fees/exams) | `mobile/src/api/guardian.ts` | ✅ |
+| Persisted `{serverUrl, slug, token}` session (secure-store) + auth gate | `mobile/src/auth/AuthContext.tsx`, `navigation/` | ✅ |
+| Screens: Login, Dashboard (multi-child switcher + summary), ChildAttendance/Marks/Fees | `mobile/src/screens/` | ✅ |
+| Project config + README (per-target server URL guidance) | `mobile/{package.json,app.json,tsconfig.json,README.md}` | ✅ |
+
+**Verification:** `npm install` (1150 pkgs) + `npx tsc --noEmit` **clean**; `expo config`
+parses. *(Found & fixed: Expo pins TS 5.3, but react-query v5's public types use the
+built-in `NoInfer` utility from TS ≥ 5.4 — without it `useQuery` degrades to `any`; bumped
+to TS 5.6 + `moduleResolution: bundler` so the generic data types resolve.)* Launch with
+`cd mobile && npm start` against a running node (`./ved.sh up`); sign in with a promoted
+**guardian** credential + the school slug. **The full M7 is now complete.**
+
+**Carried-forward:** Tier-2 writes on mobile (pay/leave/contact — endpoints exist, web uses
+them); push notifications (docs/16); refresh-token rotation; child timetable read; staff
+review-queue FE screens (decisions verified via API/tests); a real payment gateway behind
+the same `pay` endpoint; an app icon/splash asset.
 
 ## Backend — `server/` (M8 LMS / learning) — ✅ verified — ROADMAP COMPLETE
 

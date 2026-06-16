@@ -6,16 +6,22 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Button, Card, EmptyState, Field, Icon, PageHeader } from '@/shared/ui';
+import { useRequestContactChange } from '../api/guardianApi';
 
 export default function ContactPage() {
-  const [name, setName] = useState('');
+  const contact = useRequestContactChange();
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const submitted = contact.isSuccess;
+  const valid = phone.trim() !== '' || email.trim() !== '';
 
   function onSave(e: FormEvent) {
     e.preventDefault();
-    setSubmitted(true);
+    if (!valid) return;
+    contact.mutate({
+      ...(phone.trim() ? { phone: phone.trim() } : {}),
+      ...(email.trim() ? { email: email.trim() } : {}),
+    });
   }
 
   return (
@@ -30,14 +36,6 @@ export default function ContactPage() {
 
       <Card className="mt-16">
         <form onSubmit={onSave}>
-          <Field label="Full name">
-            <input
-              className="input"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="As recorded by the school"
-            />
-          </Field>
           <Field label="Phone">
             <input
               className="input"
@@ -60,9 +58,14 @@ export default function ContactPage() {
             Changes don't apply immediately — they go through the school for approval
             (maker-checker). You'll see the update once a staff member confirms it.
           </p>
+          {contact.isError && (
+            <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>
+              {String((contact.error as Error)?.message ?? contact.error)}
+            </p>
+          )}
           <div className="mt-16">
-            <Button type="submit" disabled={submitted}>
-              {submitted ? 'Submitted for approval' : 'Request changes'}
+            <Button type="submit" disabled={!valid || submitted || contact.isPending}>
+              {contact.isPending ? 'Submitting…' : submitted ? 'Submitted for approval' : 'Request changes'}
             </Button>
           </div>
         </form>
@@ -73,7 +76,7 @@ export default function ContactPage() {
           <EmptyState
             icon={<Icon name="shield" />}
             title="Sent for school approval"
-            desc="This is a preview. When the contact-update flow is live, your request will be queued for a staff member to review and approve before it takes effect."
+            desc="Your request has been queued for a staff member to review. The change takes effect once they approve it."
           />
         </Card>
       )}

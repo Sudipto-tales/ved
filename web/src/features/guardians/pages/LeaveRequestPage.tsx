@@ -1,24 +1,24 @@
-// Leave request (M7, Tier-2) — DESIGNED SCAFFOLD. No leave backend exists yet (carried
-// forward in docs/18 as a Tier-2 guarded write). This renders the finished form (dates +
-// reason); submit is local-only and shows a confirmation EmptyState. When the write lands,
-// submit POSTs the request behind guardian.request_leave (row + outbox + audit), routed to
-// the class teacher / office for approval.
+// Leave request (M7, Tier-2) — REAL guarded write. The form POSTs behind
+// guardian.request_leave: a leave_request row + outbox + audit in one tx (golden rule),
+// scoped to the caller's own child, created PENDING for the class teacher to approve.
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Button, Card, EmptyState, Field, Icon, PageHeader } from '@/shared/ui';
+import { useRequestLeave } from '../api/guardianApi';
 
 export default function LeaveRequestPage() {
   const { childId = '' } = useParams();
+  const leave = useRequestLeave(childId);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [reason, setReason] = useState('');
-  const [submitted, setSubmitted] = useState(false);
+  const submitted = leave.isSuccess;
 
   const valid = from !== '' && to !== '' && reason.trim() !== '' && to >= from;
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    if (valid) setSubmitted(true);
+    if (valid) leave.mutate({ from_date: from, to_date: to, reason });
   }
 
   if (submitted) {
@@ -29,9 +29,17 @@ export default function LeaveRequestPage() {
           <EmptyState
             icon={<Icon name="note" />}
             title="Request submitted"
-            desc={`Your leave request from ${from} to ${to} has been recorded for review. This is a preview — once the leave module is live, the school will be notified to approve it.`}
+            desc={`Your leave request from ${from} to ${to} has been submitted and is pending the class teacher's approval.`}
             action={
-              <Button variant="secondary" onClick={() => setSubmitted(false)}>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  leave.reset();
+                  setFrom('');
+                  setTo('');
+                  setReason('');
+                }}
+              >
                 Submit another
               </Button>
             }
@@ -78,9 +86,14 @@ export default function LeaveRequestPage() {
           <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
             Submitted for child #{childId.slice(0, 8)}. The school reviews and approves leave requests.
           </p>
+          {leave.isError && (
+            <p style={{ color: 'var(--danger)', fontSize: 12, marginTop: 4 }}>
+              {String((leave.error as Error)?.message ?? leave.error)}
+            </p>
+          )}
           <div className="mt-16">
-            <Button type="submit" disabled={!valid}>
-              Submit request
+            <Button type="submit" disabled={!valid || leave.isPending}>
+              {leave.isPending ? 'Submitting…' : 'Submit request'}
             </Button>
           </div>
         </form>
