@@ -12,6 +12,7 @@ package httpx
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 )
@@ -47,7 +48,7 @@ func TenantContext(resolve SlugResolver) func(http.Handler) http.Handler {
 
 func resolveTenant(r *http.Request, resolve SlugResolver) (uuid.UUID, bool) {
 	if slug := r.Header.Get("X-Tenant-Slug"); slug != "" && resolve != nil {
-		if id, ok := resolve(r.Context(), slug); ok {
+		if id, ok := resolve(r.Context(), tenantSlug(slug)); ok {
 			return id, true
 		}
 		return uuid.Nil, false
@@ -58,6 +59,14 @@ func resolveTenant(r *http.Request, resolve SlugResolver) (uuid.UUID, bool) {
 		}
 	}
 	return uuid.Nil, false
+}
+
+// tenantSlug normalises a host-derived slug to the canonical tenant slug. The admin entry
+// is reached at {slug}-admin.ved.com, and nginx authoritatively captures the whole leftmost
+// label ("lincoln-admin"), so we strip the "-admin" suffix here — server-side, independent
+// of any client value — to recover the tenant slug ("lincoln"). See docs/25 §2,§5.
+func tenantSlug(s string) string {
+	return strings.TrimSuffix(s, "-admin")
 }
 
 // belongsTo reports whether the identity holds a membership in the given tenant.
