@@ -1,0 +1,139 @@
+# staff slice contract (M5). Non-teaching staff (EMPLOYEE). Same shape as teachers:
+# onboard → roster → detail. Mirrors internal/features/staff/staff.go.
+openapi: 3.1.0
+info:
+  title: VED staff slice
+  version: 1.0.0
+paths: {}
+
+StaffOnboard:
+  post:
+    operationId: onboardStaff
+    summary: Onboard a non-teaching staff member in one transaction
+    description: >
+      Creates the staff identity (engine: user + EMPLOYEE membership [+ roles]) +
+      employee profile + outbox[employee] + audit[staff.onboarded], one tx. Returns
+      the generated credentials once. Requires staff.onboard.
+    tags: [staff]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/schemas/StaffOnboardInput' }
+    responses:
+      '201':
+        description: Staff onboarded; credentials returned once.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/StaffOnboardResult' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '409':
+        description: Employee code already exists.
+        content:
+          application/json:
+            schema: { $ref: '../components/common.yaml#/components/schemas/Error' }
+      '424':
+        description: Tenant has no slug configured (cannot generate login handles).
+        content:
+          application/json:
+            schema: { $ref: '../components/common.yaml#/components/schemas/Error' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+StaffList:
+  get:
+    operationId: listStaff
+    summary: Staff roster
+    tags: [staff]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: The tenant's staff (RLS-scoped).
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [staff]
+              properties:
+                staff:
+                  type: array
+                  items: { $ref: '#/schemas/StaffRow' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+StaffDetail:
+  get:
+    operationId: getStaff
+    summary: One staff member with profile
+    tags: [staff]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Staff detail.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/StaffDetail' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '404': { $ref: '../components/common.yaml#/components/responses/NotFound' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+schemas:
+  StaffOnboardInput:
+    type: object
+    required: [name]
+    properties:
+      name: { type: string }
+      department: { type: string }
+      designation: { type: string }
+      joining_date: { type: string, description: "YYYY-MM-DD" }
+      employee_code: { type: string }
+      role_ids:
+        type: array
+        items: { type: string, format: uuid }
+
+  StaffOnboardResult:
+    type: object
+    required: [employee_id, membership_id, login_identifier, temp_password]
+    properties:
+      employee_id: { type: string, format: uuid }
+      membership_id: { type: string, format: uuid }
+      login_identifier: { type: string }
+      temp_password: { type: string }
+
+  StaffRow:
+    type: object
+    required: [id, name, login_identifier, status, created_at]
+    properties:
+      id: { type: string, format: uuid }
+      name: { type: string }
+      login_identifier: { type: string }
+      status: { type: string }
+      department: { type: string }
+      designation: { type: string }
+      created_at: { type: string, format: date-time }
+
+  StaffDetail:
+    allOf:
+      - $ref: '#/schemas/StaffRow'
+      - type: object
+        properties:
+          employee_code: { type: string }
+          joining_date: { type: string }

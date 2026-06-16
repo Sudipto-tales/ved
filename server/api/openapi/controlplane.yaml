@@ -1,0 +1,333 @@
+# VED Control Plane API — the SEPARATE central-cloud contract (M4). A different binary
+# (cmd/controlplane), schema (control_plane), and permission namespace (platform.*) from
+# the tenant node. No tenant_id / RLS / X-Tenant-* here — control-plane writes are plain
+# transactional. Consumed by the platform SPA (web/platform). Mirrors
+# internal/features/registration/registration.go.
+#
+# Regenerate the platform TS client:  (web/) npm run gen:api:platform
+openapi: 3.1.0
+info:
+  title: VED Control Plane API
+  version: 1.0.0
+  description: >
+    School registration, payment-proof review, approval (state machine →
+    tenant ACTIVE + subscription + gapless invoice + signed license +
+    cross-plane provisioning), and platform read views.
+servers:
+  - url: http://localhost:8080
+    description: Dev control plane
+
+security:
+  - platformBearer: []
+
+tags:
+  - name: registration
+    description: Public school self-registration + payment proof.
+  - name: platform
+    description: Superadmin review/approve/reject + tenant & license views (platform.* namespace).
+
+paths:
+  /api/v1/plans:
+    get:
+      operationId: listPlans
+      summary: Public plan catalog
+      tags: [registration]
+      security: []
+      responses:
+        '200':
+          description: Active plans.
+          content:
+            application/json:
+              schema: { type: object, required: [plans], properties: { plans: { type: array, items: { $ref: '#/components/schemas/Plan' } } } }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /api/v1/register:
+    post:
+      operationId: registerSchool
+      summary: Register a school (public)
+      tags: [registration]
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RegisterInput' } } } }
+      responses:
+        '201': { description: Registered (PENDING_PAYMENT_REVIEW)., content: { application/json: { schema: { $ref: '#/components/schemas/Registration' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /api/v1/registrations/{id}:
+    get:
+      operationId: getRegistration
+      summary: Public registration status (signup site polls this)
+      tags: [registration]
+      security: []
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Registration., content: { application/json: { schema: { $ref: '#/components/schemas/Registration' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /api/v1/registrations/{id}/payment-proof:
+    post:
+      operationId: submitPaymentProof
+      summary: Submit a payment proof (public)
+      tags: [registration]
+      security: []
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ProofInput' } } } }
+      responses:
+        '202': { description: Proof accepted for review. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /api/v1/platform/registrations:
+    get:
+      operationId: listRegistrations
+      summary: All registrations (review queue)
+      tags: [platform]
+      responses:
+        '200':
+          description: Registrations.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [registrations]
+                properties:
+                  registrations: { type: array, items: { $ref: '#/components/schemas/Registration' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /api/v1/platform/registrations/{id}:
+    get:
+      operationId: getRegistrationDetail
+      summary: Registration + its payment proof
+      tags: [platform]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Detail., content: { application/json: { schema: { $ref: '#/components/schemas/RegistrationDetail' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /api/v1/platform/payment-proofs:
+    get:
+      operationId: listPaymentProofs
+      summary: All payment proofs
+      tags: [platform]
+      responses:
+        '200':
+          description: Proofs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [payment_proofs]
+                properties:
+                  payment_proofs: { type: array, items: { $ref: '#/components/schemas/Proof' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /api/v1/platform/registrations/{id}/approve:
+    post:
+      operationId: approveRegistration
+      summary: Approve → provision (state machine + gapless invoice + license + tenant admin)
+      tags: [platform]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Provisioned. The one-time admin credential is returned ONCE., content: { application/json: { schema: { $ref: '#/components/schemas/ApproveResult' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /api/v1/platform/registrations/{id}/reject:
+    post:
+      operationId: rejectRegistration
+      summary: Reject a registration
+      tags: [platform]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { required: false, content: { application/json: { schema: { $ref: '#/components/schemas/RejectInput' } } } }
+      responses:
+        '204': { description: Rejected. }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /api/v1/platform/tenants:
+    get:
+      operationId: listTenants
+      summary: Provisioned tenants
+      tags: [platform]
+      responses:
+        '200':
+          description: Tenants.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tenants]
+                properties:
+                  tenants: { type: array, items: { $ref: '#/components/schemas/Tenant' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /api/v1/platform/licenses:
+    get:
+      operationId: listLicenses
+      summary: Issued licenses
+      tags: [platform]
+      responses:
+        '200':
+          description: Licenses.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [licenses]
+                properties:
+                  licenses: { type: array, items: { $ref: '#/components/schemas/License' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+components:
+  securitySchemes:
+    platformBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Platform superadmin JWT (separate issuer + secret from tenant tokens).
+
+  responses:
+    Unauthorized: { description: Missing/invalid platform token., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Forbidden: { description: Lacks the platform.* permission., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    BadRequest: { description: Malformed input., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NotFound: { description: Not found., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Conflict: { description: Slug already taken., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Internal: { description: Server error., content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  schemas:
+    Error: { type: object, required: [error], properties: { error: { type: string } } }
+
+    Plan:
+      type: object
+      required: [id, name, tier, currency, price, billing_cycle, seats]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        tier: { type: string }
+        currency: { type: string }
+        price: { type: number }
+        billing_cycle: { type: string }
+        seats: { type: integer }
+        enabled_modules: {}
+
+    RegisterInput:
+      type: object
+      required: [school_name, slug, admin_name, admin_email, plan_id]
+      properties:
+        school_name: { type: string }
+        slug: { type: string }
+        admin_name: { type: string }
+        admin_email: { type: string }
+        admin_phone: { type: string }
+        plan_id: { type: string }
+
+    ProofInput:
+      type: object
+      required: [amount, currency, method, txn_id, payer_name]
+      properties:
+        amount: { type: number }
+        currency: { type: string }
+        method: { type: string }
+        txn_id: { type: string }
+        payer_name: { type: string }
+        paid_at: { type: string }
+        storage_key: { type: string }
+
+    RejectInput:
+      type: object
+      properties:
+        reason: { type: string }
+
+    Registration:
+      type: object
+      required: [id, school_name, slug, admin_name, admin_email, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        school_name: { type: string }
+        slug: { type: string }
+        admin_name: { type: string }
+        admin_email: { type: string }
+        status: { type: string }
+        proof_status: { type: [string, 'null'] }
+        tenant_id: { type: [string, 'null'], format: uuid }
+        created_at: { type: string, format: date-time }
+
+    Proof:
+      type: object
+      required: [id, registration_id, school_name, slug, amount, currency, method, txn_id, status, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        registration_id: { type: string, format: uuid }
+        school_name: { type: string }
+        slug: { type: string }
+        amount: { type: number }
+        currency: { type: string }
+        method: { type: string }
+        txn_id: { type: string }
+        payer_name: { type: [string, 'null'] }
+        paid_at: { type: [string, 'null'], format: date-time }
+        storage_key: { type: [string, 'null'] }
+        status: { type: string }
+        reject_reason: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+
+    RegistrationDetail:
+      type: object
+      required: [registration]
+      properties:
+        registration: { $ref: '#/components/schemas/Registration' }
+        proof: { $ref: '#/components/schemas/Proof' }
+
+    ApproveResult:
+      type: object
+      required: [tenant_id, slug, subscription_id, invoice_number, license_id, admin_login, admin_temp_password, license_expires_at]
+      properties:
+        tenant_id: { type: string, format: uuid }
+        slug: { type: string }
+        subscription_id: { type: string, format: uuid }
+        invoice_number: { type: string }
+        license_id: { type: string, format: uuid }
+        admin_login: { type: string }
+        admin_temp_password: { type: string }
+        license_expires_at: { type: string, format: date-time }
+
+    Tenant:
+      type: object
+      required: [id, slug, name, status]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        status: { type: string }
+        provisioned_at: { type: [string, 'null'], format: date-time }
+
+    License:
+      type: object
+      required: [id, tenant_slug, plan, seats, issued_at, expires_at, revoked]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_slug: { type: string }
+        plan: { type: string }
+        seats: { type: integer }
+        issued_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+        revoked: { type: boolean }

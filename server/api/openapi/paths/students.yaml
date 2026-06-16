@@ -1,0 +1,303 @@
+# students slice contract (M3 reference slice). Path items are keyed by operation
+# name and pulled into the root openapi.yaml via $ref; schemas live under #/schemas.
+# Mirrors internal/features/students/students.go exactly — freeze before FE/BE parallel work.
+openapi: 3.1.0
+info:
+  title: VED students slice
+  version: 1.0.0
+paths: {}
+
+# ---- Path items (referenced from root paths:) -------------------------------------
+StudentOnboard:
+  post:
+    operationId: onboardStudent
+    summary: Admit a student in one transaction (flow A)
+    description: >
+      Creates the global user (generated login handle + temp password,
+      must_reset_password) + STUDENT membership [+ roles] + student profile +
+      guardian(s) + guardian_student link(s) + outbox[student.enrolled] + audit,
+      all in ONE tx (the golden rule). Returns the generated credentials ONCE.
+    tags: [students]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/schemas/OnboardInput' }
+    responses:
+      '201':
+        description: Student admitted; credentials returned once.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/OnboardResult' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '409': { $ref: '../components/common.yaml#/components/responses/Conflict' }
+      '424':
+        description: Tenant has no slug configured (cannot generate login handles).
+        content:
+          application/json:
+            schema: { $ref: '../components/common.yaml#/components/schemas/Error' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+PromoteGuardian:
+  post:
+    operationId: promoteGuardian
+    summary: Give a contact-only guardian portal access (M7)
+    description: >
+      Adds a GUARDIAN login + membership + the Guardian role to an existing
+      guardian contact, in one tx. Returns the one-time login. Requires
+      student.update.
+    tags: [students]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Guardian id.
+        schema: { type: string, format: uuid }
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '201':
+        description: Guardian promoted; one-time login returned.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/GuardianCredResult' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '404': { $ref: '../components/common.yaml#/components/responses/NotFound' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+StudentList:
+  get:
+    operationId: listStudents
+    summary: Student roster
+    tags: [students]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: The tenant's students (RLS-scoped).
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [students]
+              properties:
+                students:
+                  type: array
+                  items: { $ref: '#/schemas/StudentRow' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+StudentDetail:
+  get:
+    operationId: getStudent
+    summary: One student with profile + guardians
+    tags: [students]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Student detail.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/StudentDetail' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '404': { $ref: '../components/common.yaml#/components/responses/NotFound' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+GuardianList:
+  get:
+    operationId: listGuardians
+    summary: Guardian directory
+    tags: [students]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: The tenant's guardian contacts.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [guardians]
+              properties:
+                guardians:
+                  type: array
+                  items: { $ref: '#/schemas/GuardianRow' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+GuardianDetail:
+  get:
+    operationId: getGuardian
+    summary: One guardian with linked children
+    tags: [students]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Guardian detail.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/GuardianDetail' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '404': { $ref: '../components/common.yaml#/components/responses/NotFound' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+# ---- Schemas (mirror the Go wire structs) -----------------------------------------
+schemas:
+  GuardianInput:
+    type: object
+    required: [name, phone, relation]
+    properties:
+      name: { type: string }
+      phone: { type: string }
+      email: { type: string }
+      relation: { type: string }
+      is_primary: { type: boolean }
+      can_pay: { type: boolean }
+
+  OnboardInput:
+    type: object
+    required: [name, admission_no]
+    properties:
+      name: { type: string }
+      admission_no: { type: string }
+      dob: { type: string, description: "YYYY-MM-DD" }
+      gender: { type: string }
+      category: { type: string }
+      blood_group: { type: string }
+      address: { description: "Free-form JSON address object." }
+      prior_school: { type: string }
+      prior_class: { type: string }
+      role_ids:
+        type: array
+        items: { type: string, format: uuid }
+      guardians:
+        type: array
+        items: { $ref: '#/schemas/GuardianInput' }
+
+  OnboardResult:
+    type: object
+    description: Generated credentials returned ONCE; temp password is never persisted in plaintext.
+    required: [student_id, membership_id, login_identifier, temp_password, admission_no]
+    properties:
+      student_id: { type: string, format: uuid }
+      membership_id: { type: string, format: uuid }
+      login_identifier: { type: string }
+      temp_password: { type: string }
+      admission_no: { type: string }
+
+  GuardianCredResult:
+    type: object
+    required: [guardian_id, membership_id, login_identifier, temp_password]
+    properties:
+      guardian_id: { type: string, format: uuid }
+      membership_id: { type: string, format: uuid }
+      login_identifier: { type: string }
+      temp_password: { type: string }
+
+  GuardianDTO:
+    type: object
+    required: [id, name, phone, relation, is_primary, can_pay]
+    properties:
+      id: { type: string, format: uuid }
+      name: { type: string }
+      phone: { type: string }
+      email: { type: string }
+      relation: { type: string }
+      is_primary: { type: boolean }
+      can_pay: { type: boolean }
+
+  StudentRow:
+    type: object
+    required: [id, admission_no, name, login_identifier, status, created_at]
+    properties:
+      id: { type: string, format: uuid }
+      admission_no: { type: string }
+      name: { type: string }
+      login_identifier: { type: string }
+      status: { type: string }
+      gender: { type: string }
+      created_at: { type: string, format: date-time }
+
+  StudentDetail:
+    allOf:
+      - $ref: '#/schemas/StudentRow'
+      - type: object
+        required: [guardians]
+        properties:
+          dob: { type: string }
+          category: { type: string }
+          blood_group: { type: string }
+          address: { description: "Free-form JSON address object." }
+          prior_school: { type: string }
+          prior_class: { type: string }
+          guardians:
+            type: array
+            items: { $ref: '#/schemas/GuardianDTO' }
+
+  GuardianRow:
+    type: object
+    required: [id, name, phone, relation_default, child_count]
+    properties:
+      id: { type: string, format: uuid }
+      name: { type: string }
+      phone: { type: string }
+      email: { type: string }
+      relation_default: { type: string }
+      child_count: { type: integer }
+
+  GuardianChild:
+    type: object
+    required: [student_id, name, admission_no, relation, is_primary, can_pay]
+    properties:
+      student_id: { type: string, format: uuid }
+      name: { type: string }
+      admission_no: { type: string }
+      relation: { type: string }
+      is_primary: { type: boolean }
+      can_pay: { type: boolean }
+
+  GuardianDetail:
+    type: object
+    required: [id, name, phone, children]
+    properties:
+      id: { type: string, format: uuid }
+      name: { type: string }
+      phone: { type: string }
+      email: { type: string }
+      occupation: { type: string }
+      children:
+        type: array
+        items: { $ref: '#/schemas/GuardianChild' }

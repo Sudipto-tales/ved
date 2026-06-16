@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
+    "gen:api": "orval --config ./orval.config.ts",
     "dev:platform": "vite --config platform/vite.config.ts",
     "build:platform": "tsc -b && vite build --config platform/vite.config.ts",
     "preview:platform": "vite preview --config platform/vite.config.ts"
@@ -23,6 +24,7 @@
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.2",
+    "orval": "^8.17.0",
     "typescript": "^5.6.3",
     "vite": "^5.4.9"
   }

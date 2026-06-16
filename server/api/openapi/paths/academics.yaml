@@ -1,0 +1,446 @@
+# academics slice contract (M5). Structure (program → stage → subject → section →
+# enrollment → teaching-assignment → exam) is mutable config; attendance + marks are the
+# APPEND-ONLY ledgers (corrections are new rows, latest-by-hlc wins, summed on read).
+# Mirrors internal/features/academics/academics.go.
+openapi: 3.1.0
+info:
+  title: VED academics slice
+  version: 1.0.0
+paths: {}
+
+Programs:
+  get:
+    operationId: listPrograms
+    summary: Programs
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    responses:
+      '200':
+        description: Programs.
+        content: { application/json: { schema: { type: object, required: [programs], properties: { programs: { type: array, items: { $ref: '#/schemas/Program' } } } } } }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+  post:
+    operationId: createProgram
+    summary: Create a program
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    requestBody: { required: true, content: { application/json: { schema: { $ref: '#/schemas/CreateProgramInput' } } } }
+    responses:
+      '201': { description: Created., content: { application/json: { schema: { $ref: '#/schemas/IdResult' } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+ProgramStages:
+  get:
+    operationId: listStages
+    summary: Stages of a program
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    responses:
+      '200': { description: Stages., content: { application/json: { schema: { type: object, required: [stages], properties: { stages: { type: array, items: { $ref: '#/schemas/Stage' } } } } } } }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+  post:
+    operationId: createStage
+    summary: Add a stage to a program
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    requestBody: { required: true, content: { application/json: { schema: { $ref: '#/schemas/CreateStageInput' } } } }
+    responses:
+      '201': { description: Created., content: { application/json: { schema: { $ref: '#/schemas/IdResult' } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+AllStages:
+  get:
+    operationId: listAllStages
+    summary: All stages (flattened, with program name)
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    responses:
+      '200': { description: Stages., content: { application/json: { schema: { type: object, required: [stages], properties: { stages: { type: array, items: { $ref: '#/schemas/AllStage' } } } } } } }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+Subjects:
+  get:
+    operationId: listSubjects
+    summary: Subjects
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    responses:
+      '200': { description: Subjects., content: { application/json: { schema: { type: object, required: [subjects], properties: { subjects: { type: array, items: { $ref: '#/schemas/Subject' } } } } } } }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+  post:
+    operationId: createSubject
+    summary: Create a subject
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    requestBody: { required: true, content: { application/json: { schema: { $ref: '#/schemas/CreateSubjectInput' } } } }
+    responses:
+      '201': { description: Created., content: { application/json: { schema: { $ref: '#/schemas/IdResult' } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+Sections:
+  get:
+    operationId: listSections
+    summary: Sections
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    responses:
+      '200': { description: Sections., content: { application/json: { schema: { type: object, required: [sections], properties: { sections: { type: array, items: { $ref: '#/schemas/Section' } } } } } } }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+  post:
+    operationId: createSection
+    summary: Create a section
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    requestBody: { required: true, content: { application/json: { schema: { $ref: '#/schemas/CreateSectionInput' } } } }
+    responses:
+      '201': { description: Created., content: { application/json: { schema: { $ref: '#/schemas/IdResult' } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+SectionEnrollments:
+  get:
+    operationId: listEnrollments
+    summary: Enrollments in a section
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    responses:
+      '200': { description: Enrollments., content: { application/json: { schema: { type: object, required: [enrollments], properties: { enrollments: { type: array, items: { $ref: '#/schemas/Enrollment' } } } } } } }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+SectionEnroll:
+  post:
+    operationId: enrollStudent
+    summary: Enroll a student into a section
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    requestBody: { required: true, content: { application/json: { schema: { $ref: '#/schemas/EnrollInput' } } } }
+    responses:
+      '201': { description: Enrolled., content: { application/json: { schema: { $ref: '#/schemas/IdResult' } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+TeachingAssignments:
+  get:
+    operationId: listTeachingAssignments
+    summary: Teaching assignments
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    responses:
+      '200': { description: Teaching assignments., content: { application/json: { schema: { type: object, required: [teaching_assignments], properties: { teaching_assignments: { type: array, items: { $ref: '#/schemas/TeachingAssignment' } } } } } } }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+  post:
+    operationId: createTeachingAssignment
+    summary: Assign a teacher to teach a subject in a section
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    requestBody: { required: true, content: { application/json: { schema: { $ref: '#/schemas/TeachingAssignmentInput' } } } }
+    responses:
+      '201': { description: Created., content: { application/json: { schema: { $ref: '#/schemas/IdResult' } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+Exams:
+  get:
+    operationId: listExams
+    summary: Exams
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    responses:
+      '200': { description: Exams., content: { application/json: { schema: { type: object, required: [exams], properties: { exams: { type: array, items: { $ref: '#/schemas/Exam' } } } } } } }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+  post:
+    operationId: createExam
+    summary: Create an exam
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    requestBody: { required: true, content: { application/json: { schema: { $ref: '#/schemas/CreateExamInput' } } } }
+    responses:
+      '201': { description: Created., content: { application/json: { schema: { $ref: '#/schemas/IdResult' } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+Curriculum:
+  get:
+    operationId: listCurriculum
+    summary: Curriculum for a program stage
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: program_stage_id, in: query, required: true, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    responses:
+      '200': { description: Curriculum items., content: { application/json: { schema: { type: object, required: [curriculum], properties: { curriculum: { type: array, items: { $ref: '#/schemas/CurriculumItem' } } } } } } }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+Attendance:
+  get:
+    operationId: getAttendance
+    summary: Attendance for a section on a date (latest-by-hlc per student)
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: section_id, in: query, required: true, schema: { type: string, format: uuid } }
+      - { name: date, in: query, required: true, schema: { type: string } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    responses:
+      '200': { description: Attendance rows., content: { application/json: { schema: { type: object, required: [attendance], properties: { attendance: { type: array, items: { $ref: '#/schemas/AttendanceRow' } } } } } } }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+  post:
+    operationId: markAttendance
+    summary: Mark attendance (append-only ledger write)
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    requestBody: { required: true, content: { application/json: { schema: { $ref: '#/schemas/MarkAttendanceInput' } } } }
+    responses:
+      '201': { description: Marked., content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+AttendanceSummary:
+  get:
+    operationId: getAttendanceSummary
+    summary: Summed attendance counts (derived)
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: section_id, in: query, required: false, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    responses:
+      '200': { description: Summed counts (e.g. PRESENT/ABSENT/LATE/EXCUSED)., content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+Marks:
+  get:
+    operationId: getMarks
+    summary: Marks for an exam + enrollment (latest-by-hlc per subject)
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: exam_id, in: query, required: true, schema: { type: string, format: uuid } }
+      - { name: enrollment_id, in: query, required: true, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    responses:
+      '200': { description: Mark rows., content: { application/json: { schema: { type: object, required: [marks], properties: { marks: { type: array, items: { $ref: '#/schemas/MarkRow' } } } } } } }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+  post:
+    operationId: enterMarks
+    summary: Enter marks (append-only ledger write)
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    requestBody: { required: true, content: { application/json: { schema: { $ref: '#/schemas/EnterMarksInput' } } } }
+    responses:
+      '201': { description: Entered., content: { application/json: { schema: { type: object, additionalProperties: true } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+StudentAcademics:
+  get:
+    operationId: getStudentAcademics
+    summary: Per-student academics summary (enrollment + attendance + marks)
+    tags: [academics]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    responses:
+      '200': { description: Student academics summary., content: { application/json: { schema: { $ref: '#/schemas/StudentAcademicsSummary' } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+schemas:
+  IdResult: { type: object, required: [id], properties: { id: { type: string, format: uuid } } }
+
+  CreateProgramInput: { type: object, required: [name, code], properties: { name: { type: string }, code: { type: string } } }
+  Program:
+    type: object
+    required: [id, name, code, enrollment_mode, status]
+    properties: { id: { type: string, format: uuid }, name: { type: string }, code: { type: string }, enrollment_mode: { type: string }, status: { type: string } }
+
+  CreateStageInput: { type: object, required: [name, ordinal], properties: { name: { type: string }, ordinal: { type: integer } } }
+  Stage:
+    type: object
+    required: [id, name, ordinal]
+    properties: { id: { type: string, format: uuid }, name: { type: string }, ordinal: { type: integer } }
+  AllStage:
+    allOf:
+      - $ref: '#/schemas/Stage'
+      - type: object
+        required: [program_id, program_name]
+        properties: { program_id: { type: string, format: uuid }, program_name: { type: string } }
+
+  CreateSubjectInput: { type: object, required: [name, code, kind], properties: { name: { type: string }, code: { type: string }, kind: { type: string } } }
+  Subject:
+    type: object
+    required: [id, name, code, kind]
+    properties: { id: { type: string, format: uuid }, name: { type: string }, code: { type: string }, kind: { type: string } }
+
+  CreateSectionInput:
+    type: object
+    required: [program_stage_id, name]
+    properties: { program_stage_id: { type: string, format: uuid }, name: { type: string }, capacity: { type: integer } }
+  Section:
+    type: object
+    required: [id, name, program_stage_id, academic_year_id, capacity, stage_name, program_name]
+    properties:
+      id: { type: string, format: uuid }
+      name: { type: string }
+      program_stage_id: { type: string, format: uuid }
+      academic_year_id: { type: string, format: uuid }
+      capacity: { type: [integer, 'null'] }
+      stage_name: { type: string }
+      program_name: { type: string }
+
+  EnrollInput: { type: object, required: [student_id], properties: { student_id: { type: string, format: uuid }, roll_no: { type: string } } }
+  Enrollment:
+    type: object
+    required: [id, student_id, roll_no, status, login_identifier]
+    properties:
+      id: { type: string, format: uuid }
+      student_id: { type: string, format: uuid }
+      roll_no: { type: [string, 'null'] }
+      status: { type: string }
+      login_identifier: { type: string }
+
+  TeachingAssignmentInput:
+    type: object
+    required: [section_id, subject_id, teacher_id]
+    properties: { section_id: { type: string, format: uuid }, subject_id: { type: string, format: uuid }, teacher_id: { type: string, format: uuid } }
+  TeachingAssignment:
+    type: object
+    required: [id, section_id, subject_id, teacher_id]
+    properties: { id: { type: string, format: uuid }, section_id: { type: string, format: uuid }, subject_id: { type: string, format: uuid }, teacher_id: { type: string, format: uuid } }
+
+  CreateExamInput: { type: object, required: [name, max_marks], properties: { name: { type: string }, max_marks: { type: number } } }
+  Exam:
+    type: object
+    required: [id, name, max_marks]
+    properties: { id: { type: string, format: uuid }, name: { type: string }, max_marks: { type: number } }
+
+  CurriculumItem:
+    type: object
+    required: [id, subject_id, requirement, subject_name, subject_code]
+    properties:
+      id: { type: string, format: uuid }
+      subject_id: { type: string, format: uuid }
+      requirement: { type: string }
+      subject_name: { type: string }
+      subject_code: { type: string }
+
+  AttendanceEntryInput: { type: object, required: [enrollment_id, status], properties: { enrollment_id: { type: string, format: uuid }, status: { type: string } } }
+  MarkAttendanceInput:
+    type: object
+    required: [section_id, marked_by, date, entries]
+    properties:
+      section_id: { type: string, format: uuid }
+      marked_by: { type: string, format: uuid }
+      date: { type: string }
+      entries: { type: array, items: { $ref: '#/schemas/AttendanceEntryInput' } }
+  AttendanceRow: { type: object, required: [enrollment_id, status], properties: { enrollment_id: { type: string, format: uuid }, status: { type: string } } }
+
+  MarkEntryInput: { type: object, required: [enrollment_id, subject_id, marks], properties: { enrollment_id: { type: string, format: uuid }, subject_id: { type: string, format: uuid }, marks: { type: number } } }
+  EnterMarksInput:
+    type: object
+    required: [exam_id, graded_by, entries]
+    properties:
+      exam_id: { type: string, format: uuid }
+      graded_by: { type: string, format: uuid }
+      entries: { type: array, items: { $ref: '#/schemas/MarkEntryInput' } }
+  MarkRow: { type: object, required: [subject_id, marks], properties: { subject_id: { type: string, format: uuid }, marks: { type: number } } }
+
+  StudentAcademicsSummary:
+    type: object
+    required: [enrolled, attendance, marks]
+    properties:
+      enrolled: { type: boolean }
+      enrollment_id: { type: string, format: uuid }
+      section_name: { type: string }
+      roll_no: { type: [string, 'null'] }
+      status: { type: [string, 'null'] }
+      attendance: { type: object, additionalProperties: { type: integer } }
+      marks:
+        type: array
+        items:
+          type: object
+          required: [exam, subject, marks, max_marks]
+          properties: { exam: { type: string }, subject: { type: string }, marks: { type: number }, max_marks: { type: number } }

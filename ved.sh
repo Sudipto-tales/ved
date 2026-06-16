@@ -88,6 +88,19 @@ cmd_clean_demo() {  # remove all demo-school data in one shot
   exec "$(dirname "$0")/scripts/clean-demo.sh" "$@"
 }
 
+cmd_test() {    # run Go DB-integration tests (RLS isolation + golden-rule atomicity)
+  ensure_env
+  info "Ensuring infra is up…"; "${DC[@]}" up -d postgres >/dev/null
+  # Wait for Postgres to accept connections (compose healthcheck may lag).
+  for _ in $(seq 1 30); do
+    "${DC[@]}" exec -T postgres pg_isready -U "${POSTGRES_USER:-ved}" >/dev/null 2>&1 && break
+    sleep 1
+  done
+  local url="postgres://${POSTGRES_USER:-ved}:${POSTGRES_PASSWORD:-ved}@localhost:5432/${POSTGRES_DB:-ved}?sslmode=disable"
+  info "Running integration tests (-tags=integration)…"
+  ( cd server && DATABASE_URL="$url" go test -tags=integration "${@:-./...}" ) && ok "Integration tests passed."
+}
+
 cmd_help() {
   cat <<EOF
 ${c_bold}VED — Docker control${c_reset}   (docs/commands.md)
@@ -111,6 +124,9 @@ ${c_bold}VED — Docker control${c_reset}   (docs/commands.md)
     ./ved.sh seed-demo        Seed 2 demo schools (Lincoln + Maple) with ~100 students each
     ./ved.sh clean-demo       Remove ALL demo-school data in one shot (record + both tenants)
 
+  ${c_bold}Tests${c_reset}
+    ./ved.sh test [pkgs]      Run Go DB-integration tests (RLS + golden-rule); ensures infra is up
+
   Aliases: start=up, stop=down.
 EOF
 }
@@ -127,6 +143,7 @@ case "${1:-help}" in
   psql)             shift; cmd_psql "$@";;
   seed-demo)        shift; cmd_seed_demo "$@";;
   clean-demo)       shift; cmd_clean_demo "$@";;
+  test)             shift; cmd_test "$@";;
   reset|nuke)       shift; cmd_reset "$@";;
   help|-h|--help)   cmd_help;;
   *)                warn "Unknown command: $1"; echo; cmd_help; exit 1;;

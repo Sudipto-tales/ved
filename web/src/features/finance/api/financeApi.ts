@@ -1,48 +1,32 @@
-// Typed hooks for the finance slice (M5) — the append-only ledger. The student's
-// outstanding is always the DERIVED Σ DEBIT − Σ CREDIT the server returns, never a
-// cached balance (docs/database/06-finance.md).
+// Finance slice FE surface (M5) — the append-only ledger. Types + HTTP calls are
+// GENERATED from the frozen OpenAPI spec (server/api/openapi) via `npm run gen:api`.
+// The student's outstanding is always the DERIVED Σ DEBIT − Σ CREDIT the server returns,
+// never a cached balance (docs/database/06-finance.md). See studentsApi.ts for the pattern.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/shared/api/client';
+import {
+  listFeeHeads,
+  createFeeHead,
+  listInvoices,
+  issueInvoice,
+  listPayments,
+  recordPayment,
+  voidPayment,
+  getStudentLedger,
+} from '@/shared/api/generated/finance/finance';
+import type {
+  ListFeeHeads200FeeHeadsItem,
+  ListInvoices200InvoicesItem,
+  ListPayments200PaymentsItem,
+  GetStudentLedger200,
+  GetStudentLedger200EntriesItem,
+} from '@/shared/api/generated/model';
 
-export interface LedgerEntry {
-  id: string;
-  direction: 'DEBIT' | 'CREDIT';
-  amount: number;
-  source_type: string;
-  source_id: string | null;
-  created_at: string;
-}
-
-export interface Ledger {
-  entries: LedgerEntry[];
-  total_debit: number;
-  total_credit: number;
-  outstanding: number;
-}
-
-export interface FeeHead {
-  id: string;
-  name: string;
-  kind: string;
-}
-
-export interface InvoiceRow {
-  id: string;
-  student_id: string;
-  status: string;
-  issued_at: string;
-  due_date: string | null;
-}
-
-export interface PaymentRow {
-  id: string;
-  student_id: string;
-  receipt_no: string;
-  amount: number;
-  method: string;
-  status: string;
-  paid_at: string;
-}
+// Generated types, re-exported under the names this slice's components already use.
+export type FeeHead = ListFeeHeads200FeeHeadsItem;
+export type InvoiceRow = ListInvoices200InvoicesItem;
+export type PaymentRow = ListPayments200PaymentsItem;
+export type Ledger = GetStudentLedger200;
+export type LedgerEntry = GetStudentLedger200EntriesItem;
 
 export const financeKeys = {
   ledger: (studentId: string) => ['finance', 'ledger', studentId] as const,
@@ -54,15 +38,14 @@ export const financeKeys = {
 export function useFeeHeads() {
   return useQuery({
     queryKey: financeKeys.feeHeads,
-    queryFn: () => api.get<{ fee_heads: FeeHead[] }>('/api/v1/finance/fee-heads'),
+    queryFn: ({ signal }) => listFeeHeads(signal),
   });
 }
 
 export function useCreateFeeHead() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { name: string; kind: string }) =>
-      api.post<{ id: string }>('/api/v1/finance/fee-heads', body),
+    mutationFn: (body: { name: string; kind: string }) => createFeeHead(body),
     onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.feeHeads }),
   });
 }
@@ -70,21 +53,21 @@ export function useCreateFeeHead() {
 export function useInvoices() {
   return useQuery({
     queryKey: financeKeys.invoices,
-    queryFn: () => api.get<{ invoices: InvoiceRow[] }>('/api/v1/finance/invoices'),
+    queryFn: ({ signal }) => listInvoices(signal),
   });
 }
 
 export function usePayments() {
   return useQuery({
     queryKey: financeKeys.payments,
-    queryFn: () => api.get<{ payments: PaymentRow[] }>('/api/v1/finance/payments'),
+    queryFn: ({ signal }) => listPayments(signal),
   });
 }
 
 export function useLedger(studentId: string) {
   return useQuery({
     queryKey: financeKeys.ledger(studentId),
-    queryFn: () => api.get<Ledger>(`/api/v1/finance/students/${studentId}/ledger`),
+    queryFn: ({ signal }) => getStudentLedger(studentId, signal),
     enabled: !!studentId,
   });
 }
@@ -93,7 +76,7 @@ export function useIssueInvoice(studentId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { lines: { description: string; amount: number }[]; due_date?: string }) =>
-      api.post<{ invoice_id: string }>('/api/v1/finance/invoices', { student_id: studentId, ...body }),
+      issueInvoice({ student_id: studentId, ...body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.ledger(studentId) }),
   });
 }
@@ -102,7 +85,7 @@ export function useRecordPayment(studentId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { amount: number; method: string }) =>
-      api.post<{ payment_id: string; receipt_no: string }>('/api/v1/finance/payments', { student_id: studentId, ...body }),
+      recordPayment({ student_id: studentId, ...body }),
     onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.ledger(studentId) }),
   });
 }
@@ -110,7 +93,7 @@ export function useRecordPayment(studentId: string) {
 export function useVoidPayment(studentId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (paymentId: string) => api.post<void>(`/api/v1/finance/payments/${paymentId}/void`),
+    mutationFn: (paymentId: string) => voidPayment(paymentId),
     onSuccess: () => qc.invalidateQueries({ queryKey: financeKeys.ledger(studentId) }),
   });
 }

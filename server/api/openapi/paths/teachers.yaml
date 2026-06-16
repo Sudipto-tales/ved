@@ -1,0 +1,139 @@
+# teachers slice contract (M5). The students shape minus guardians: onboard → roster →
+# detail. Mirrors internal/features/teachers/teachers.go.
+openapi: 3.1.0
+info:
+  title: VED teachers slice
+  version: 1.0.0
+paths: {}
+
+TeacherOnboard:
+  post:
+    operationId: onboardTeacher
+    summary: Onboard a teacher in one transaction
+    description: >
+      Creates the teacher's identity (engine: user + TEACHER membership [+ roles]) +
+      teacher profile + outbox[teacher] + audit[teacher.onboarded], all in one tx.
+      Returns the generated credentials once. Requires teacher.onboard.
+    tags: [teachers]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/schemas/TeacherOnboardInput' }
+    responses:
+      '201':
+        description: Teacher onboarded; credentials returned once.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/TeacherOnboardResult' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '409':
+        description: Employee code already exists.
+        content:
+          application/json:
+            schema: { $ref: '../components/common.yaml#/components/schemas/Error' }
+      '424':
+        description: Tenant has no slug configured (cannot generate login handles).
+        content:
+          application/json:
+            schema: { $ref: '../components/common.yaml#/components/schemas/Error' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+TeacherList:
+  get:
+    operationId: listTeachers
+    summary: Teacher roster
+    tags: [teachers]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: The tenant's teachers (RLS-scoped).
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [teachers]
+              properties:
+                teachers:
+                  type: array
+                  items: { $ref: '#/schemas/TeacherRow' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+TeacherDetail:
+  get:
+    operationId: getTeacher
+    summary: One teacher with profile
+    tags: [teachers]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Teacher detail.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/TeacherDetail' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '404': { $ref: '../components/common.yaml#/components/responses/NotFound' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+schemas:
+  TeacherOnboardInput:
+    type: object
+    required: [name]
+    properties:
+      name: { type: string }
+      qualifications: { description: "Free-form JSON (degrees, certifications)." }
+      joining_date: { type: string, description: "YYYY-MM-DD" }
+      employee_code: { type: string }
+      specialization: { type: string }
+      role_ids:
+        type: array
+        items: { type: string, format: uuid }
+
+  TeacherOnboardResult:
+    type: object
+    required: [teacher_id, membership_id, login_identifier, temp_password]
+    properties:
+      teacher_id: { type: string, format: uuid }
+      membership_id: { type: string, format: uuid }
+      login_identifier: { type: string }
+      temp_password: { type: string }
+
+  TeacherRow:
+    type: object
+    required: [id, name, login_identifier, status, created_at]
+    properties:
+      id: { type: string, format: uuid }
+      name: { type: string }
+      login_identifier: { type: string }
+      status: { type: string }
+      employee_code: { type: string }
+      specialization: { type: string }
+      created_at: { type: string, format: date-time }
+
+  TeacherDetail:
+    allOf:
+      - $ref: '#/schemas/TeacherRow'
+      - type: object
+        properties:
+          qualifications: { description: "Free-form JSON (degrees, certifications)." }
+          joining_date: { type: string }

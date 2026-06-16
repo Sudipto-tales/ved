@@ -1,0 +1,203 @@
+# learning (LMS) slice contract (M8). Content → submit → grade, anchored on a
+# teaching_assignment. submission + grade are APPEND-ONLY (a resubmission/re-grade is a
+# new row; latest wins). Grading an assignment with max_marks writes a mark_entry into the
+# ONE academics marks ledger in the same tx. Mirrors internal/features/learning/learning.go.
+openapi: 3.1.0
+info:
+  title: VED learning slice
+  version: 1.0.0
+paths: {}
+
+Assignments:
+  post:
+    operationId: createAssignment
+    summary: Publish an assignment (teacher; academics.manage)
+    tags: [learning]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    requestBody: { required: true, content: { application/json: { schema: { $ref: '#/schemas/CreateAssignmentInput' } } } }
+    responses:
+      '201': { description: Published., content: { application/json: { schema: { $ref: '#/schemas/AssignmentResult' } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+TeachingAssignmentAssignments:
+  get:
+    operationId: listAssignments
+    summary: Assignments under a teaching assignment
+    tags: [learning]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: taId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    responses:
+      '200': { description: Assignments., content: { application/json: { schema: { type: object, required: [assignments], properties: { assignments: { type: array, items: { $ref: '#/schemas/Assignment' } } } } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+AssignmentMaterials:
+  get:
+    operationId: listMaterials
+    summary: Materials attached to an assignment
+    tags: [learning]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    responses:
+      '200': { description: Materials., content: { application/json: { schema: { type: object, required: [materials], properties: { materials: { type: array, items: { $ref: '#/schemas/Material' } } } } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+  post:
+    operationId: addMaterial
+    summary: Attach a material to an assignment
+    tags: [learning]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    requestBody: { required: true, content: { application/json: { schema: { $ref: '#/schemas/AddMaterialInput' } } } }
+    responses:
+      '201': { description: Added., content: { application/json: { schema: { $ref: '#/schemas/MaterialResult' } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+SubmitAssignment:
+  post:
+    operationId: submitAssignment
+    summary: Submit work (student self-service; the server resolves the student)
+    description: Append-only — a resubmission is a NEW row. No staff permission; the student is resolved from the caller's membership. Status is LATE if past due_at.
+    tags: [learning]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    requestBody: { required: true, content: { application/json: { schema: { $ref: '#/schemas/SubmitInput' } } } }
+    responses:
+      '201': { description: Submitted., content: { application/json: { schema: { $ref: '#/schemas/SubmitResult' } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+GradeSubmission:
+  post:
+    operationId: gradeSubmission
+    summary: Grade a submission (teacher; marks.enter) — writes a mark_entry in the same tx
+    description: Append-only — a re-grade is a NEW grade row. If the assignment has max_marks, an append-only mark_entry is written into the academics marks ledger atomically.
+    tags: [learning]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: id, in: path, required: true, description: Submission id., schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    requestBody: { required: true, content: { application/json: { schema: { $ref: '#/schemas/GradeInput' } } } }
+    responses:
+      '201': { description: Graded., content: { application/json: { schema: { $ref: '#/schemas/GradeResult' } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '404': { $ref: '../components/common.yaml#/components/responses/NotFound' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+AssignmentSubmissions:
+  get:
+    operationId: listSubmissions
+    summary: Latest submission per student for an assignment (+ grade)
+    tags: [learning]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    responses:
+      '200': { description: Submissions., content: { application/json: { schema: { type: object, required: [submissions], properties: { submissions: { type: array, items: { $ref: '#/schemas/SubmissionRow' } } } } } } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+schemas:
+  CreateAssignmentInput:
+    type: object
+    required: [teaching_assignment_id, title]
+    properties:
+      teaching_assignment_id: { type: string, format: uuid }
+      title: { type: string }
+      instructions: { type: string }
+      due_at: { type: string }
+      max_marks: { type: [number, 'null'] }
+  AssignmentResult: { type: object, required: [assignment_id], properties: { assignment_id: { type: string, format: uuid } } }
+  Assignment:
+    type: object
+    required: [id, title, status, max_marks]
+    properties:
+      id: { type: string, format: uuid }
+      title: { type: string }
+      status: { type: string }
+      max_marks: { type: [number, 'null'] }
+      due_at: { type: string }
+
+  AddMaterialInput:
+    type: object
+    required: [title, kind]
+    properties:
+      title: { type: string }
+      kind: { type: string }
+      url: { type: string }
+      body: { type: string }
+  MaterialResult: { type: object, required: [material_id], properties: { material_id: { type: string, format: uuid } } }
+  Material:
+    type: object
+    required: [id, title, kind]
+    properties:
+      id: { type: string, format: uuid }
+      title: { type: string }
+      kind: { type: string }
+      url: { type: string }
+      body: { type: string }
+
+  SubmissionFileInput:
+    type: object
+    required: [storage_key, filename, size]
+    properties:
+      storage_key: { type: string }
+      filename: { type: string }
+      size: { type: integer, format: int64 }
+  SubmitInput:
+    type: object
+    required: [files]
+    properties:
+      files: { type: array, items: { $ref: '#/schemas/SubmissionFileInput' } }
+  SubmitResult: { type: object, required: [submission_id, status], properties: { submission_id: { type: string, format: uuid }, status: { type: string } } }
+
+  GradeInput:
+    type: object
+    required: [marks]
+    properties:
+      marks: { type: number }
+      feedback: { type: string }
+  GradeResult: { type: object, required: [grade_id], properties: { grade_id: { type: string, format: uuid } } }
+
+  SubmissionRow:
+    type: object
+    required: [submission_id, student_id, student, status, submitted_at, marks]
+    properties:
+      submission_id: { type: string, format: uuid }
+      student_id: { type: string, format: uuid }
+      student: { type: string }
+      status: { type: string }
+      submitted_at: { type: string, format: date-time }
+      marks: { type: [number, 'null'] }

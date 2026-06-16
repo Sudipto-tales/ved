@@ -198,6 +198,42 @@ rebuilt. Roadmap (P0–P6) in [docs/22](./docs/22-frontend.md); tokens in [docs/
 
 ---
 
+## DoD backfill — OpenAPI contract + DB-integration tests — ✅ complete (all slices)
+
+The two cross-cutting DoD gaps carried forward since M1 ("OpenAPI specs" + "automated
+DB-integration tests") are now closed across **every** slice. The `students` slice proved
+the shape; the rest replicate it. **OpenAPI is the frozen fence:** Orval generates the TS
+client + Zod from the spec, and each FE feature **consumes the generated client** (the
+hand-written contract types are deleted — the spec is the single source).
+
+**Tooling (shared):**
+- Tenant-plane spec: `server/api/openapi/openapi.yaml` (root) + `components/common.yaml` + `paths/<slice>.yaml` — **9 slices, ~50 operations**, redocly-lint clean.
+- Control-plane spec (separate plane, platform JWT): `server/api/openapi/controlplane.yaml` — 11 operations, redocly-lint clean.
+- Codegen: `web/orval.config.ts` (tenant app + platform app targets), mutators `web/src/shared/api/mutator.ts` + `web/platform/src/shared/mutator.ts`, `npm run gen:api`. Generated dirs gitignored.
+- Test harness: `server/internal/platform/testdb/testdb.go` — `Pool` (ved_app, RLS-enforcing) + `ControlPlanePool` (owner) + throwaway tenants, behind the `integration` build tag. `./ved.sh test` ensures infra and runs `-tags=integration`; default `go test ./...` stays DB-free.
+
+**Per-slice (spec ✅ · FE consumes generated ✅ · integration tests ✅ pass on live PG):**
+
+| Slice | Ops | Integration tests (what they prove) |
+|---|---|---|
+| students | 6 | RLS isolation · golden-rule atomicity · rollback (no orphan outbox/audit) |
+| teachers | 3 | RLS · golden rule · dup employee_code rollback |
+| staff | 3 | RLS · golden rule · dup rollback |
+| access (RBAC) | 12 | RLS on roles · role-create golden rule · dup-name rollback |
+| finance | 7 | RLS · derived outstanding (Σ DEBIT−Σ CREDIT) · append-only void preserves payment · gapless receipts |
+| academics | 14 | RLS · **append-only attendance** (correction = new row, latest-by-hlc wins) |
+| learning (LMS) | 6 | RLS · **append-only** submit/grade · grade → mark_entry in the ONE marks ledger |
+| identity | 4 | login with generated temp credential (must-reset) · wrong-password rejected |
+| guardian | 5 | child-scoping boundary — sees only linked child, **foreign child rejected** |
+| registration (CP) | 11 | golden chain: register → proof → approve → tenant ACTIVE + **gapless invoice** + license + provisioned admin |
+
+**Live verification:** `./ved.sh test ./...` → **all 10 slices pass** on the live Postgres
+(28 integration tests). `go build`/`go vet`/`gofmt` clean; both web apps `tsc -b` +
+`vite build` + `build:platform` clean.
+**Carried-forward (minor):** Go-side request validation (`go-playground/validator`) and
+wiring the generated **Zod** schemas into the FE forms (schemas are generated, not yet
+imported by forms) — both incremental, neither blocks the contract or the tests.
+
 ## Documentation — ✅ complete
 
 `docs/` (01–22 + `database/` + `plan/` + `commands.md`). Architecture, slices, RBAC,
@@ -209,10 +245,12 @@ reference are all written and cross-linked.
 
 | Item | Status |
 |---|---|
-| `ved.sh` (build/start/stop + helpers) | ✅ runs, syntax-checked |
+| `ved.sh` (build/start/stop + helpers + `test`) | ✅ runs, syntax-checked |
 | `docker-compose.yml` (infra + `app` profile) | ✅ `docker compose config` validates |
 | `.env.example` | ✅ |
 | `docs/commands.md` | ✅ |
+| OpenAPI → TS client codegen (`web/ npm run gen:api`, Orval; tenant + platform apps) | ✅ all slices |
+| DB-integration tests (`./ved.sh test`, `-tags=integration`) | ✅ all 10 slices (28 tests) |
 
 `./ved.sh up infra` works today. `./ved.sh up` (full) works once the steps below pass.
 
