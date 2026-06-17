@@ -102,12 +102,14 @@ address=/ved.test/127.0.0.1
 Minimal alternative (no dnsmasq) — add explicit hosts entries per school:
 ```
 # /etc/hosts
-127.0.0.1  lincoln.ved.test  maple.ved.test  platform.ved.test
+127.0.0.1  ved.test  lincoln.ved.test  maple.ved.test  platform.ved.test
 ```
 **nginx** (committed at `deploy/nginx/ved.test.conf`) reverse-proxies to the existing dev
 servers — tenant subdomains → the tenant SPA + node API; `platform.` → the platform SPA +
-control plane. In dev it's run as a container (`./ved.sh up` includes it); it proxies to
-`web:5173`, `node:8081` (container port), `controlplane:8080` on the compose network.
+control plane; the **apex `ved.test`** → the platform SPA's **public marketing landing +
+signup** (same bundle, opens on `/`). In dev it's run as a container (`./ved.sh up` includes
+it); it proxies to `web:5173`, `node:8091` (container port), `controlplane:8080`,
+`platform-web:5174` on the compose network.
 
 ## 7. Production (`*.ved.com`)
 
