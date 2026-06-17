@@ -10,8 +10,6 @@ interface TenantState {
   activeTenantId: string | null;
   /** Tenant slug from the subdomain ({slug}.ved.*), or null on a bare host. */
   tenantSlug: string | null;
-  /** True when this host is an admin entry ({slug}-admin.ved.*). */
-  isAdminHost: boolean;
   /** Whether a tenant context exists (subdomain slug OR a picked id). */
   hasTenant: boolean;
   setTenant: (id: string) => void;
@@ -40,7 +38,6 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     () => ({
       activeTenantId,
       tenantSlug: host?.slug ?? null,
-      isAdminHost: host?.admin ?? false,
       hasTenant: !!host || !!activeTenantId,
       setTenant,
       clearTenant,

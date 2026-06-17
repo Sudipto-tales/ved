@@ -33,7 +33,7 @@ export const teachersPages: PageDef[] = [
 
   // --- TEACHER: portal (identity-scoped, no permission gate) ---
   {
-    path: 'portal/teacher',
+    path: 'teacher',
     title: 'Dashboard',
     persona: 'TEACHER',
     tier: 'T1',
@@ -42,7 +42,7 @@ export const teachersPages: PageDef[] = [
     element: () => import('./pages/TeacherDashboardPage'),
   },
   {
-    path: 'portal/teacher/sections',
+    path: 'teacher/sections',
     title: 'My sections / students',
     persona: 'TEACHER',
     tier: 'T1',
@@ -51,7 +51,7 @@ export const teachersPages: PageDef[] = [
     element: () => import('./pages/TeacherSectionsPage'),
   },
   {
-    path: 'portal/teacher/attendance',
+    path: 'teacher/attendance',
     title: 'Mark attendance',
     persona: 'TEACHER',
     permission: 'attendance.mark',
@@ -61,7 +61,7 @@ export const teachersPages: PageDef[] = [
     element: () => import('./pages/TeacherAttendancePage'),
   },
   {
-    path: 'portal/teacher/marks',
+    path: 'teacher/marks',
     title: 'Enter marks',
     persona: 'TEACHER',
     permission: 'marks.enter',
@@ -71,7 +71,7 @@ export const teachersPages: PageDef[] = [
     element: () => import('./pages/TeacherMarksPage'),
   },
   {
-    path: 'portal/teacher/timetable',
+    path: 'teacher/timetable',
     title: 'My timetable',
     persona: 'TEACHER',
     tier: 'T2',

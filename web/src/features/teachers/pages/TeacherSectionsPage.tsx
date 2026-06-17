@@ -15,7 +15,7 @@ export default function TeacherSectionsPage() {
           icon={<Icon name="layers" size={30} />}
           title="Your sections will appear here"
           desc="A teacher-scoped sections projection (the classes bound to you via teaching assignments) is on the roadmap. You can still mark attendance and enter marks by entering a section or exam id."
-          action={<Link to="/portal/teacher/attendance"><Button>Mark attendance</Button></Link>}
+          action={<Link to="/teacher/attendance"><Button>Mark attendance</Button></Link>}
         />
       </Card>
     </div>

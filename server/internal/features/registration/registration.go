@@ -43,9 +43,22 @@ import (
 
 var slugRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,30}$`)
 
+// reservedSlugs can never be a school slug — they collide with the routing namespace
+// (platform/www/api/...) or with the reserved subdomains we serve ourselves (docs/25).
+// Keep this in sync with web/src/shared/tenant/reserved.ts (the FE inline check).
+var reservedSlugs = map[string]bool{
+	"platform": true, "www": true, "app": true, "api": true, "admin": true,
+	"console": true, "ops": true, "status": true, "support": true, "help": true,
+	"docs": true, "blog": true, "mail": true, "smtp": true, "ftp": true,
+	"cdn": true, "static": true, "assets": true, "auth": true, "login": true,
+	"signup": true, "register": true, "dashboard": true, "node": true,
+	"controlplane": true, "control-plane": true, "ved": true,
+}
+
 var (
 	ErrNotFound     = errors.New("not found")
 	ErrBadSlug      = errors.New("slug must be lower-kebab (a-z, 0-9, -)")
+	ErrReservedSlug = errors.New("that slug is reserved — please choose another")
 	ErrSlugTaken    = errors.New("slug already taken")
 	ErrEmailTaken   = errors.New("admin email already registered")
 	ErrBadState     = errors.New("registration is not awaiting review")
@@ -120,6 +133,9 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (RegistrationD
 	}
 	if !slugRe.MatchString(in.Slug) {
 		return RegistrationDTO{}, ErrBadSlug
+	}
+	if reservedSlugs[in.Slug] {
+		return RegistrationDTO{}, ErrReservedSlug
 	}
 	planID, err := uuid.Parse(in.PlanID)
 	if err != nil {
@@ -819,7 +835,7 @@ func writeErr(w http.ResponseWriter, err error) {
 		httpx.Error(w, http.StatusNotFound, "not found")
 	case errors.Is(err, ErrBadSlug), errors.Is(err, ErrInvalidInput):
 		httpx.Error(w, http.StatusBadRequest, err.Error())
-	case errors.Is(err, ErrSlugTaken), errors.Is(err, ErrEmailTaken):
+	case errors.Is(err, ErrSlugTaken), errors.Is(err, ErrReservedSlug), errors.Is(err, ErrEmailTaken):
 		httpx.Error(w, http.StatusConflict, err.Error())
 	case errors.Is(err, ErrBadState), errors.Is(err, ErrNoProof):
 		httpx.Error(w, http.StatusUnprocessableEntity, err.Error())

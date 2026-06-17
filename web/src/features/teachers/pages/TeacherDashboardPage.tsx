@@ -26,7 +26,7 @@ export default function TeacherDashboardPage() {
         tag="Teacher portal"
         title="Welcome back"
         subtitle="Mark attendance, enter marks, publish assignments, and manage your classes — all from here."
-        action={<Link to="/portal/teacher/attendance"><Button variant="secondary">Mark attendance</Button></Link>}
+        action={<Link to="/teacher/attendance"><Button variant="secondary">Mark attendance</Button></Link>}
       />
 
       <div className="grid-stats mt-16">
@@ -37,12 +37,12 @@ export default function TeacherDashboardPage() {
 
       <h3 style={{ fontSize: 15, margin: '24px 0 12px' }}>Quick actions</h3>
       <div className="grid-stats">
-        <Tile to="/portal/teacher/sections" icon="layers" title="My sections" desc="Classes and students you teach." />
+        <Tile to="/teacher/sections" icon="layers" title="My sections" desc="Classes and students you teach." />
         <Can permission="attendance.mark">
-          <Tile to="/portal/teacher/attendance" icon="note" title="Mark attendance" desc="Record present/absent for a section." />
+          <Tile to="/teacher/attendance" icon="note" title="Mark attendance" desc="Record present/absent for a section." />
         </Can>
         <Can permission="marks.enter">
-          <Tile to="/portal/teacher/marks" icon="graduation" title="Enter marks" desc="Record exam marks for your students." />
+          <Tile to="/teacher/marks" icon="graduation" title="Enter marks" desc="Record exam marks for your students." />
         </Can>
         <Tile to="/teacher/assignments" icon="book" title="Assignments" desc="Publish and grade coursework." />
       </div>

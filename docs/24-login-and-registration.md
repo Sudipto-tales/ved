@@ -30,8 +30,25 @@ wrong plane.)
 
 ## 2. How each person gets their login
 
-Nobody self-registers as a student/teacher/guardian — a staff member creates them and
-hands over credentials ([06 — Onboarding & Credentials](./06-onboarding-credentials.md)).
+> **The registration rule (one line):** the **only** thing that self-registers is a
+> **school**, and only at the **platform** (`/signup` on the control plane, §4). *Inside* a
+> school **nobody self-registers** — every member (admin, staff, teacher, student, guardian)
+> is **created by someone already in the school** who holds the matching permission. There is
+> no public "create your account" inside a tenant.
+
+So there are exactly two ways an account comes into being:
+1. **A school** registers itself on the platform → on approval, VED provisions the tenant
+   and its **first admin** (§4). This is the single self-service entry point.
+2. **Everyone else** is **onboarded** from within the school by a permission-holder — by
+   default the admin, who may delegate the `*.onboard` permissions to staff:
+
+| Action | Permission | Who has it by default |
+|---|---|---|
+| Onboard a student | `student.onboard` | Admin (delegable to admission staff) |
+| Onboard a teacher | `teacher.onboard` | Admin (delegable to HR) |
+| Onboard staff | `staff.onboard` | Admin (delegable to HR) |
+| Promote a guardian to a login | `student.update` | Admin |
+
 The login identifier is a **generated handle**, not a real mailbox:
 
 ```
@@ -62,8 +79,8 @@ them to their home (`PersonaHome`); the sidebar shows only that persona's pages:
 |---|---|---|
 | `EMPLOYEE` + `tenant.admin` (**Admin**) | Dashboard | Full management: People, Academics, Finance, Access, Setup, Reports… |
 | `EMPLOYEE` (**Staff**) | Dashboard | Onboarding, fee collection, ledger — whatever their roles permit |
-| `TEACHER` | `/portal/teacher` | My sections, mark attendance, enter marks, assignments |
-| `STUDENT` | `/portal/student` | My profile, attendance, marks, timetable, fees, assignments |
+| `TEACHER` | `/teacher` | My sections, mark attendance, enter marks, assignments |
+| `STUDENT` | `/student` | My profile, attendance, marks, timetable, fees, assignments |
 | `GUARDIAN` | `/guardian` | Each child's attendance, marks, fees, notices (own children only) |
 
 Cross-persona pages are additionally gated by **permission** (RBAC), and every read is

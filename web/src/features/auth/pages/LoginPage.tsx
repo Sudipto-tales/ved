@@ -15,7 +15,7 @@ const DEV_PASSWORD = import.meta.env.VITE_DEV_PASSWORD ?? 'admin1234';
 
 export default function LoginPage() {
   const { login } = useAuth();
-  const { tenantSlug, isAdminHost } = useTenant();
+  const { tenantSlug } = useTenant();
   const continueAfterAuth = useAuthFlow();
   const [identifier, setIdentifier] = useState(DEV_LOGIN);
   const [password, setPassword] = useState(DEV_PASSWORD);
@@ -48,10 +48,10 @@ export default function LoginPage() {
 
   return (
     <form onSubmit={onSubmit}>
-      <h2 style={{ fontSize: 18 }}>{isAdminHost ? 'Admin sign in' : 'Sign in'}</h2>
+      <h2 style={{ fontSize: 18 }}>Sign in</h2>
       <p className="muted" style={{ fontSize: 13, marginTop: 6 }}>
         {tenantSlug
-          ? <>Signing in to <strong style={{ color: 'var(--text)' }}>{tenantSlug}</strong>{isAdminHost ? ' (admin)' : ''}.</>
+          ? <>Signing in to <strong style={{ color: 'var(--text)' }}>{tenantSlug}</strong>.</>
           : 'Welcome back. Enter your VED credentials to continue.'}
       </p>
 

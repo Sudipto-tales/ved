@@ -1,6 +1,6 @@
 // Unit tests for tenant resolution from request headers (docs/25-subdomain-routing.md).
-// No DB: the SlugResolver is faked. The care points are (1) the admin entry's host label
-// "{slug}-admin" must normalise to the canonical "{slug}" before resolving, and (2) the
+// No DB: the SlugResolver is faked. The care points are (1) the subdomain label IS the
+// tenant slug verbatim (admin is a path /admin, not a subdomain), and (2) the
 // X-Tenant-Slug → X-Tenant-ID priority order.
 package httpx
 
@@ -12,21 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-func TestTenantSlug(t *testing.T) {
-	cases := map[string]string{
-		"lincoln":       "lincoln",
-		"lincoln-admin": "lincoln",
-		"maple-admin":   "maple",
-		"admin":         "admin",   // not a suffix → unchanged
-		"a-admin-admin": "a-admin", // strip exactly one trailing suffix
-	}
-	for in, want := range cases {
-		if got := tenantSlug(in); got != want {
-			t.Errorf("tenantSlug(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestResolveTenant(t *testing.T) {
 	lincoln := uuid.New()
 	// Fake resolver: only the canonical "lincoln" slug is known.
@@ -36,15 +21,6 @@ func TestResolveTenant(t *testing.T) {
 		}
 		return uuid.Nil, false
 	}
-
-	t.Run("admin subdomain label resolves to the tenant", func(t *testing.T) {
-		r, _ := http.NewRequest(http.MethodGet, "/", nil)
-		r.Header.Set("X-Tenant-Slug", "lincoln-admin") // as nginx captures it
-		id, ok := resolveTenant(r, resolve)
-		if !ok || id != lincoln {
-			t.Fatalf("got (%v, %v), want (%v, true)", id, ok, lincoln)
-		}
-	})
 
 	t.Run("plain slug resolves", func(t *testing.T) {
 		r, _ := http.NewRequest(http.MethodGet, "/", nil)

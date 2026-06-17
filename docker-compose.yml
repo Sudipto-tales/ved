@@ -139,8 +139,10 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     command: ["npm", "run", "dev:platform", "--", "--host", "0.0.0.0"]
-    expose:
-      - "5174" # internal only; nginx fronts it at platform.ved.test
+    environment:
+      VITE_PLATFORM_API_URL: http://localhost:${CONTROLPLANE_PORT:-8080}
+    ports:
+      - "${PLATFORM_WEB_PORT:-5174}:5174" # bare-localhost access; nginx also fronts it at platform.ved.test
     depends_on:
       - controlplane
 
