@@ -114,21 +114,52 @@ code{font-family:var(--mono);font-size:.92em;}
 /* App shell */
 .shell{display:flex;min-height:100vh;}
 .sidebar{width:280px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);
-  padding:20px 16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;}
-.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;padding:4px 8px;}
-.brand-badge{width:32px;height:32px;border-radius:8px;background:var(--primary);color:#fff;
+  padding:20px 16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto;
+  transition:width .18s ease;}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;padding:4px 8px;white-space:nowrap;}
+.brand-badge{width:32px;height:32px;border-radius:8px;background:var(--primary);color:#fff;flex-shrink:0;
   display:grid;place-items:center;box-shadow:0 8px 16px -4px rgba(0,167,111,.24);}
 .nav-group{margin-top:18px;}
 .nav-group-label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-  color:var(--text-subtle);padding:0 8px 6px;}
+  color:var(--text-subtle);padding:0 8px 6px;white-space:nowrap;overflow:hidden;}
 .nav-item{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:var(--radius-sm);
-  color:var(--text-muted);font-size:14px;font-weight:600;cursor:pointer;transition:background .12s,color .12s;}
+  color:var(--text-muted);font-size:14px;font-weight:600;cursor:pointer;transition:background .12s,color .12s;
+  white-space:nowrap;overflow:hidden;}
 .nav-item:hover{background:var(--surface-2);color:var(--text);}
 .nav-item.active{background:var(--primary-weak);color:var(--primary-hover);}
 .nav-item .tier{margin-left:auto;font-size:10px;font-weight:700;color:var(--text-subtle);}
 .nav-icon{width:20px;height:20px;flex-shrink:0;color:currentColor;}
-.main{flex:1;padding:32px 36px;max-width:1240px;}
+
+/* Content column (topbar stacked over the scrolling main) */
+.content{flex:1;min-width:0;display:flex;flex-direction:column;}
+.main{flex:1;min-width:0;padding:32px 36px;}
 .spacer{flex:1;}
+
+/* Collapsed sidebar — icon rail. The shell toggles .nav-collapsed; labels are hidden in
+   JSX, here we just narrow the rail and center the glyphs. */
+.shell.nav-collapsed .sidebar{width:76px;padding:20px 12px;align-items:center;}
+.shell.nav-collapsed .sidebar .brand{justify-content:center;}
+.shell.nav-collapsed .sidebar .nav-group{width:100%;}
+.shell.nav-collapsed .sidebar .nav-item{justify-content:center;padding:10px 0;gap:0;width:100%;}
+.shell.nav-collapsed .sidebar .nav-group-label{text-align:center;}
+
+/* Topbar — sticky utility bar above the page (search + actions + avatar) */
+.topbar{height:64px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 24px;
+  background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:20;}
+.topbar-search{display:flex;align-items:center;gap:8px;height:38px;padding:0 12px;min-width:200px;
+  border-radius:var(--radius-pill);background:var(--surface-2);border:1px solid var(--border);
+  color:var(--text-subtle);}
+.topbar-search input{border:none;background:transparent;outline:none;flex:1;color:var(--text);min-width:0;}
+.topbar-search .kbd{margin-left:auto;}
+.icon-btn{position:relative;display:grid;place-items:center;width:40px;height:40px;border-radius:var(--radius-pill);
+  border:none;background:transparent;color:var(--text-muted);cursor:pointer;transition:background .12s,color .12s;}
+.icon-btn:hover{background:var(--surface-2);color:var(--text);}
+.icon-badge{position:absolute;top:6px;right:6px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;
+  background:var(--danger);color:#fff;font-size:10px;font-weight:800;display:grid;place-items:center;
+  box-shadow:0 0 0 2px var(--surface);}
+.avatar{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:800;
+  color:#fff;background:linear-gradient(135deg,var(--primary),var(--info));
+  box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--primary-tint);cursor:pointer;}
 
 /* Hero banner — deep organic gradient, white type, optional CTA (Minimal welcome card) */
 .hero{position:relative;overflow:hidden;border-radius:var(--radius-lg);padding:40px;color:#fff;

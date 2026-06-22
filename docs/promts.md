@@ -1,0 +1,12 @@
+1. in superadmin the sidebar options are ,... Dashboard , Tenanats { Registration , List - there was a datatable where we can search a particular tennat and do not follow generic design style , Payment Proofs }, 
+Subscriptions { Analytics Dasboard , Plans & Prices , Licens - types list datatable and 3 cards in top which show the types of licens no. of buyers in each type licens where a indicater groth show that licens sell is go higher or lower }
+settings , support { when i open support there i need a chat bot flowting in rightside lower corner ... use sms icon for that chatbot}
+
+2. Tenanats Registration : Show the request tennat registration where shw a list on a datatable with that tenant name and request date and the email and status , when suoeradmin click on the tenant then a popup open and show the tennat credentials which i send to then tennat via mail or copy and send ,..we can also create a login link where if tennat click that link thne he din;t have to put his credentials in the login form 
+so first the superadmin accept the tennat request and then after tennat chaneg it's password superamin can't see his password when ever he open his profile there he saw some dots or star in the place of password ...where tennat can give acces to the superadmin if tennat give access to the superamdin then superaadmin can see the password after chnange also , do you understand the flow what i am asking for ?
+suggest me what else we can do in the registration ... show a analytics also in a short right side cards or however plan tell me the best way to show that ,... the things is i want to see the request average time and a analytics when the request comes more show by using a dot chart 
+
+3. Plans & Prices : It is a list of Plans with there prices and show the status also and other details in the table . Plan it like if a plan is changed or update then there some times like 24 hours give all of them who is request for pastplan they are getiing those plan in the past money ,
+I want to say if a plan price is increase then past plan usser do not have to pay more ,..only those new users who buy the plan they have to pay the new price. And also i am planning to include autopay for the subscription.
+
+4. Licens : I want to do the licens like if the superadmin want then he can cancle any particular tennat licens imediately.
