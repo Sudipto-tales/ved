@@ -2,9 +2,9 @@
 // (shell/sidebar/nav-item) for a consistent look, but its own nav + sign-out.
 // Adds a collapsible icon-rail sidebar and a sticky utility topbar (search, language,
 // notifications, contacts, settings, profile).
-import { useState } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
-import { Icon, type IconName } from '@/shared/ui';
+import { useEffect, useRef, useState } from 'react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Icon, VedLogo, type IconName } from '@/shared/ui';
 import { platformPages } from '../routes';
 import { usePlatformAuth } from '../shared/auth';
 
@@ -14,17 +14,30 @@ const ICONS: Record<string, IconName> = {
   'payment-proofs': 'wallet',
   tenants: 'building',
   subscriptions: 'layers',
+  plans: 'note',
   licenses: 'shield',
   analytics: 'chart',
   support: 'help',
+  releases: 'graduation',
+  settings: 'settings',
 };
 const iconFor = (path: string): IconName => ICONS[path.split('/')[0]] ?? 'grid';
+
+// Grouped sidebar (docs/promts.md "Optimized Super Admin Sidebar"). Ordered sections;
+// each lists the page paths it owns. Pages not present/nav are silently skipped.
+const SECTIONS: { label?: string; paths: string[] }[] = [
+  { paths: ['dashboard'] },
+  { label: 'TENANTS', paths: ['registrations', 'tenants', 'payment-proofs'] },
+  { label: 'BILLING', paths: ['subscriptions', 'licenses'] },
+  { label: 'SYSTEM', paths: ['releases', 'settings', 'support'] },
+];
 
 const COLLAPSE_KEY = 'ved.platform.navCollapsed';
 
 export function PlatformShell() {
   const { logout } = usePlatformAuth();
   const loc = useLocation();
+  const navigate = useNavigate();
   const nav = platformPages.filter((p) => p.nav);
 
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === '1');
@@ -36,39 +49,68 @@ export function PlatformShell() {
     });
   };
 
+  // Topbar dropdown menus (profile / language). Close on outside click or Escape.
+  const [menu, setMenu] = useState<null | 'profile' | 'lang'>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menu) return;
+    const onDoc = (e: MouseEvent) => {
+      if (actionsRef.current && !actionsRef.current.contains(e.target as Node)) setMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setMenu(null);
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menu]);
+  const go = (path: string) => {
+    setMenu(null);
+    navigate(path);
+  };
+
   return (
     <div className={`shell${collapsed ? ' nav-collapsed' : ''}`}>
       <aside className="sidebar">
         <Link to="/" className="brand" title="VED Platform">
-          <span className="brand-badge"><Icon name="layers" size={16} /></span>
+          <VedLogo size={28} />
           {!collapsed && 'VED Platform'}
         </Link>
         {!collapsed && (
           <div className="subtle" style={{ fontSize: 11, padding: '2px 8px 0' }}>control plane</div>
         )}
 
-        <nav className="nav-group">
-          {!collapsed && <div className="nav-group-label">SUPERADMIN</div>}
-          {nav.map((p) => {
-            const active = loc.pathname === `/${p.path}`;
-            return (
-              <Link
-                key={p.path}
-                to={`/${p.path}`}
-                className={`nav-item${active ? ' active' : ''}`}
-                title={collapsed ? p.title : undefined}
-              >
-                <Icon name={iconFor(p.path)} className="nav-icon" />
-                {!collapsed && (
-                  <>
-                    {p.title}
-                    <span className="tier">{p.tier}</span>
-                  </>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
+        {SECTIONS.map((section, si) => {
+          const items = section.paths
+            .map((path) => nav.find((p) => p.path === path))
+            .filter((p): p is (typeof nav)[number] => Boolean(p));
+          if (items.length === 0) return null;
+          return (
+            <nav className="nav-group" key={si}>
+              {!collapsed && section.label && <div className="nav-group-label">{section.label}</div>}
+              {items.map((p) => {
+                const active = loc.pathname === `/${p.path}`;
+                return (
+                  <Link
+                    key={p.path}
+                    to={`/${p.path}`}
+                    className={`nav-item${active ? ' active' : ''}`}
+                    title={collapsed ? p.title : undefined}
+                  >
+                    <Icon name={iconFor(p.path)} className="nav-icon" />
+                    {!collapsed && (
+                      <>
+                        {p.title}
+                        <span className="tier">{p.tier}</span>
+                      </>
+                    )}
+                  </Link>
+                );
+              })}
+            </nav>
+          );
+        })}
 
         <div className="spacer" />
         <button className="nav-item" onClick={logout} title={collapsed ? 'Sign out' : undefined}>
@@ -91,20 +133,68 @@ export function PlatformShell() {
 
           <div className="spacer" />
 
-          <button className="icon-btn" aria-label="Language" title="Language">
-            <Icon name="globe" />
-          </button>
-          <button className="icon-btn" aria-label="Notifications" title="Notifications">
-            <Icon name="bell" />
-            <span className="icon-badge">4</span>
-          </button>
-          <button className="icon-btn" aria-label="Contacts" title="Contacts">
-            <Icon name="users" />
-          </button>
-          <button className="icon-btn" aria-label="Settings" title="Settings">
-            <Icon name="settings" />
-          </button>
-          <button className="avatar" aria-label="Account" title="Superadmin">SA</button>
+          <div className="flex gap-8" ref={actionsRef} style={{ alignItems: 'center', position: 'relative' }}>
+            <div style={{ position: 'relative' }}>
+              <button
+                className="icon-btn"
+                aria-label="Language"
+                title="Language"
+                onClick={() => setMenu((m) => (m === 'lang' ? null : 'lang'))}
+              >
+                <Icon name="globe" />
+              </button>
+              {menu === 'lang' && (
+                <div className="menu" role="menu">
+                  <button className="menu-item active" role="menuitem" onClick={() => setMenu(null)}>
+                    <Icon name="globe" /> English
+                  </button>
+                  <button className="menu-item" role="menuitem" onClick={() => setMenu(null)}>
+                    हिन्दी (Hindi)
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <button className="icon-btn" aria-label="Notifications" title="Pending registrations" onClick={() => go('/registrations')}>
+              <Icon name="bell" />
+            </button>
+            <button className="icon-btn" aria-label="Tenants" title="Tenants" onClick={() => go('/tenants')}>
+              <Icon name="users" />
+            </button>
+            <button className="icon-btn" aria-label="Settings" title="Settings" onClick={() => go('/settings')}>
+              <Icon name="settings" />
+            </button>
+
+            <div style={{ position: 'relative' }}>
+              <button
+                className="avatar"
+                aria-label="Account"
+                title="Account"
+                onClick={() => setMenu((m) => (m === 'profile' ? null : 'profile'))}
+              >
+                SA
+              </button>
+              {menu === 'profile' && (
+                <div className="menu" role="menu">
+                  <div className="menu-head">
+                    <b>Superadmin</b>
+                    <span>super@ved.platform</span>
+                  </div>
+                  <div className="menu-sep" />
+                  <button className="menu-item" role="menuitem" onClick={() => go('/settings')}>
+                    <Icon name="settings" /> Settings
+                  </button>
+                  <button className="menu-item" role="menuitem" onClick={() => go('/releases')}>
+                    <Icon name="graduation" /> App Releases
+                  </button>
+                  <div className="menu-sep" />
+                  <button className="menu-item" role="menuitem" onClick={() => { setMenu(null); logout(); }}>
+                    <Icon name="arrow-left" /> Sign out
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </header>
 
         <main className="main">

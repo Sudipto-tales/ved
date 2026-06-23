@@ -39,6 +39,13 @@ export async function platformFetch<T>(config: RequestConfig): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    // Stale/expired token → clear it and bounce to login (see shared/api.ts).
+    if (res.status === 401 && token && !config.url.includes('/platform/login')) {
+      localStorage.removeItem(PLATFORM_TOKEN_KEY);
+      if (typeof location !== 'undefined' && !location.pathname.endsWith('/login')) {
+        location.assign('/login');
+      }
+    }
     throw new ApiError(res.status, text || res.statusText);
   }
   if (res.status === 204 || res.status === 202) return undefined as T;

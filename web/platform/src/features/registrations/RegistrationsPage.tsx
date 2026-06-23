@@ -1,84 +1,198 @@
 // The superadmin review queue (M4 state machine). Approve runs the whole chain —
 // tenant + subscription + gapless invoice + signed license + tenant-plane provisioning —
-// and returns the new school admin's one-time credentials, shown once here.
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Badge, Button, Card, PageHeader, Spinner } from '@/shared/ui';
-import { useRegistrations, useApprove, useReject, type ApproveResult } from './api';
+// and returns the new school admin's one-time credentials, shown once here. This page
+// also surfaces registration analytics (volume, funnel, approval rate) and a Send
+// Reminder action for in-flight sign-ups.
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  Badge,
+  BarSeries,
+  DataTable,
+  DotChart,
+  Icon,
+  PageHeader,
+  SectionCard,
+  Spinner,
+  StatCard,
+  Tabs,
+  type Column,
+} from '@/shared/ui';
+import { useRegistrations, type Registration } from './api';
+import { useRegistrationAnalytics, useRemindRegistration } from '../../shared/platformApi';
 
-const STATUS_TONE: Record<string, 'success' | 'neutral' | 'warning'> = {
+const STATUS_TONE: Record<string, 'success' | 'neutral' | 'warning' | 'danger'> = {
   ACTIVE: 'success',
+  REJECTED: 'danger',
   PENDING_PAYMENT_REVIEW: 'warning',
-  ONBOARDING: 'neutral',
-  ADMIN_REGISTERED: 'neutral',
-  REJECTED: 'warning',
+  ONBOARDING: 'warning',
+  ADMIN_REGISTERED: 'warning',
   SUSPENDED: 'warning',
 };
 
+type FilterId = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'UNDER_REVIEW';
+
+const FILTER_TABS: { id: FilterId; label: string }[] = [
+  { id: 'ALL', label: 'All' },
+  { id: 'PENDING', label: 'Pending' },
+  { id: 'APPROVED', label: 'Approved' },
+  { id: 'REJECTED', label: 'Rejected' },
+  { id: 'UNDER_REVIEW', label: 'Under Review' },
+];
+
+const PENDING_STATUSES = ['ADMIN_REGISTERED', 'ONBOARDING'];
+
+function matchesFilter(filter: FilterId, status: string): boolean {
+  switch (filter) {
+    case 'ALL':
+      return true;
+    case 'PENDING':
+      return PENDING_STATUSES.includes(status);
+    case 'UNDER_REVIEW':
+      return status === 'PENDING_PAYMENT_REVIEW';
+    case 'APPROVED':
+      return status === 'ACTIVE';
+    case 'REJECTED':
+      return status === 'REJECTED';
+    default:
+      return true;
+  }
+}
+
+// Remind is only meaningful while a sign-up is still in flight.
+function canRemind(status: string): boolean {
+  return status !== 'ACTIVE' && status !== 'REJECTED';
+}
+
 export default function RegistrationsPage() {
+  const navigate = useNavigate();
   const { data, isLoading, error } = useRegistrations();
-  const approve = useApprove();
-  const reject = useReject();
-  const [provisioned, setProvisioned] = useState<ApproveResult | null>(null);
+  const analytics = useRegistrationAnalytics();
+  const remind = useRemindRegistration();
+  const [filter, setFilter] = useState<FilterId>('ALL');
+  const [remindedId, setRemindedId] = useState<string | null>(null);
+
+  const a = analytics.data;
+  const registrations = data?.registrations ?? [];
+  const filtered = useMemo(
+    () => registrations.filter((r) => matchesFilter(filter, r.status)),
+    [registrations, filter],
+  );
+
+  const sendReminder = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    remind.mutate(id, { onSuccess: () => setRemindedId(id) });
+  };
+
+  const columns: Column<Registration>[] = [
+    {
+      header: 'School',
+      cell: (r) => (
+        <div>
+          <div style={{ fontWeight: 600 }}>{r.school_name}</div>
+          <div className="subtle" style={{ fontSize: 12, marginTop: 2 }}>/{r.slug}</div>
+        </div>
+      ),
+    },
+    {
+      header: 'Admin',
+      cell: (r) => (
+        <div>
+          <div>{r.admin_name}</div>
+          <div className="subtle" style={{ fontSize: 12, marginTop: 2 }}>{r.admin_email}</div>
+        </div>
+      ),
+    },
+    {
+      header: 'Status',
+      cell: (r) => (
+        <div className="flex gap-8" style={{ alignItems: 'center' }}>
+          <Badge tone={STATUS_TONE[r.status] ?? 'neutral'}>{r.status}</Badge>
+          {r.proof_status && <Badge tone="neutral">proof {r.proof_status}</Badge>}
+        </div>
+      ),
+    },
+    {
+      header: '',
+      align: 'right',
+      cell: (r) =>
+        canRemind(r.status) ? (
+          <span className="flex gap-8" style={{ justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              className="icon-btn"
+              disabled={remind.isPending}
+              title={remindedId === r.id && remind.isSuccess ? 'Reminder sent' : 'Send reminder'}
+              aria-label={remindedId === r.id && remind.isSuccess ? 'Reminder sent' : 'Send reminder'}
+              onClick={(e) => sendReminder(e, r.id)}
+            >
+              <Icon name={remindedId === r.id && remind.isSuccess ? 'check' : 'bell'} />
+            </button>
+          </span>
+        ) : null,
+    },
+  ];
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <PageHeader title="Registrations" subtitle="Review school sign-ups. Approving provisions the tenant, signs a license, and creates the first admin." />
 
-      {provisioned && (
-        <Card className="mt-16" style={{ borderColor: 'var(--accent)' }}>
-          <h3 style={{ fontSize: 15, marginBottom: 8 }}>Provisioned · {provisioned.slug}</h3>
-          <div className="row"><span className="muted">Admin login</span><code>{provisioned.admin_login}</code></div>
-          <div className="row"><span className="muted">Temp password</span><code>{provisioned.admin_temp_password}</code></div>
-          <div className="row"><span className="muted">Invoice</span><span>{provisioned.invoice_number}</span></div>
-          <div className="row"><span className="muted">License</span><Badge tone="success">issued</Badge></div>
-          <p className="subtle" style={{ fontSize: 12, marginTop: 8 }}>Hand these credentials to the school admin — shown once.</p>
-          <div className="mt-16"><Button variant="ghost" onClick={() => setProvisioned(null)}>Dismiss</Button></div>
-        </Card>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+        <StatCard label="Total" tone="violet" icon="note" value={analytics.isLoading ? <Spinner /> : (a?.total ?? 0)} />
+        <StatCard label="Pending" tone="warning" icon="user-plus" value={analytics.isLoading ? <Spinner /> : (a?.pending ?? 0)} />
+        <StatCard
+          label="Avg Approval Time"
+          tone="info"
+          icon="chart"
+          value={analytics.isLoading ? <Spinner /> : a ? `${a.avg_approval_hours}h` : '—'}
+        />
+        <StatCard
+          label="Approval Rate"
+          tone="success"
+          icon="shield"
+          value={analytics.isLoading ? <Spinner /> : a ? `${a.approval_rate_pct}%` : '—'}
+        />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+        <SectionCard icon="chart" title="Request Volume / Day" tone="info">
+          <DotChart data={a?.volume_per_day ?? []} />
+        </SectionCard>
+        <SectionCard icon="layers" title="Registrations by Status" tone="violet">
+          <BarSeries
+            data={[
+              { label: 'Pending', value: (a?.pending ?? 0) - (a?.under_review ?? 0) },
+              { label: 'Under Review', value: a?.under_review ?? 0 },
+              { label: 'Approved', value: a?.approved ?? 0 },
+              { label: 'Rejected', value: a?.rejected ?? 0 },
+            ]}
+            tone="#7c4dff"
+          />
+        </SectionCard>
+      </div>
+
+      {remind.error && (
+        <p style={{ color: 'var(--danger)', fontSize: 13 }}>Failed to send reminder: {String(remind.error)}</p>
       )}
 
-      {(approve.error || reject.error) && (
-        <p style={{ color: 'var(--danger)', fontSize: 13 }}>{String(approve.error || reject.error)}</p>
-      )}
-
-      <Card className="mt-16">
-        {isLoading && <Spinner />}
+      <SectionCard
+        icon="user-plus"
+        title="Registration Queue"
+        tone="primary"
+        right={<Tabs tabs={FILTER_TABS} active={filter} onChange={setFilter} />}
+      >
         {error && <p style={{ color: 'var(--danger)' }}>Failed to load: {String(error)}</p>}
-        {!isLoading && (data?.registrations.length ?? 0) === 0 && <p className="muted">No registrations yet.</p>}
-        {data?.registrations.map((r) => (
-          <div className="row" key={r.id} style={{ alignItems: 'flex-start' }}>
-            <div style={{ flex: 1 }}>
-              <div className="flex gap-8" style={{ alignItems: 'center' }}>
-                <Link to={`/registrations/${r.id}`} style={{ fontWeight: 600 }}>{r.school_name}</Link>
-                <span className="subtle" style={{ fontSize: 12 }}>/{r.slug}</span>
-                <Badge tone={STATUS_TONE[r.status] ?? 'neutral'}>{r.status}</Badge>
-                {r.proof_status && <Badge tone="neutral">proof {r.proof_status}</Badge>}
-              </div>
-              <div className="subtle" style={{ fontSize: 12, marginTop: 4 }}>{r.admin_name} · {r.admin_email}</div>
-            </div>
-            {r.status === 'PENDING_PAYMENT_REVIEW' && (
-              <div className="flex gap-8">
-                <Button
-                  disabled={approve.isPending}
-                  onClick={() => approve.mutate(r.id, { onSuccess: (res) => setProvisioned(res) })}
-                >
-                  Approve
-                </Button>
-                <Button
-                  variant="ghost"
-                  disabled={reject.isPending}
-                  onClick={() => {
-                    const reason = prompt('Reject reason?') || 'rejected';
-                    reject.mutate({ id: r.id, reason });
-                  }}
-                >
-                  Reject
-                </Button>
-              </div>
-            )}
-          </div>
-        ))}
-      </Card>
+        <DataTable
+          columns={columns}
+          rows={filtered}
+          rowKey={(r) => r.id}
+          loading={isLoading}
+          searchable
+          searchText={(r) => `${r.school_name} ${r.slug} ${r.admin_name} ${r.admin_email} ${r.status}`}
+          empty="No registrations match this filter."
+          onRowClick={(r) => navigate(`/registrations/${r.id}`)}
+        />
+      </SectionCard>
     </div>
   );
 }

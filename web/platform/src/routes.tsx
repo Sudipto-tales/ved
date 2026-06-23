@@ -89,10 +89,9 @@ export const platformPages: PageDef[] = [
 
   // ── T2/T3: monetization, entitlements, insight, support (docs/11)
   {
-    // Plans, per-cycle pricing + annual discount, trial_days, feature catalog
-    // & entitlements — all superadmin-configured data (docs/11).
+    // MRR/ARR, churn, revenue trend, plan popularity — the subscription analytics dashboard.
     path: 'subscriptions',
-    title: 'Subscription Plans & Pricing',
+    title: 'Subscriptions',
     persona: 'SUPERADMIN',
     permission: 'platform.subscription.manage',
     tier: 'T2',
@@ -112,17 +111,6 @@ export const platformPages: PageDef[] = [
     element: () => import('./features/licenses/LicensesPage'),
   },
   {
-    // MRR/ARR, active/trial/churned, renewals, revenue by plan (docs/11 platform dashboard).
-    path: 'analytics',
-    title: 'Cross-School Analytics',
-    persona: 'SUPERADMIN',
-    permission: 'platform.analytics.view',
-    tier: 'T3',
-    status: 'done',
-    nav: true,
-    element: () => import('./features/analytics/AnalyticsPage'),
-  },
-  {
     path: 'support',
     title: 'Support Console',
     persona: 'SUPERADMIN',
@@ -131,5 +119,29 @@ export const platformPages: PageDef[] = [
     status: 'done',
     nav: true,
     element: () => import('./features/support/SupportPage'),
+  },
+
+  // ── System: app distribution + platform configuration
+  {
+    // Upload / register desktop + mobile builds and publish them to the download list.
+    path: 'releases',
+    title: 'App Releases',
+    persona: 'SUPERADMIN',
+    permission: 'platform.tenant.manage',
+    tier: 'T1',
+    status: 'done',
+    nav: true,
+    element: () => import('./features/releases/ReleasesPage'),
+  },
+  {
+    // Platform configuration — collapsible cards for credentials, endpoints, integrations.
+    path: 'settings',
+    title: 'Settings',
+    persona: 'SUPERADMIN',
+    permission: 'platform.tenant.manage',
+    tier: 'T1',
+    status: 'done',
+    nav: true,
+    element: () => import('./features/settings/SettingsPage'),
   },
 ];

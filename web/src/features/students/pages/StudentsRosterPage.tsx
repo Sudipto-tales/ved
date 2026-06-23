@@ -1,13 +1,62 @@
 // Student roster (M3) — the tenant's admitted students, RLS-scoped server-side. Links
 // to the onboarding wizard and to each student's detail.
-import { Link } from 'react-router-dom';
-import { Badge, Button, Card, PageHeader, Spinner, StatCard } from '@/shared/ui';
+import { Link, useNavigate } from 'react-router-dom';
+import {
+  Badge,
+  Button,
+  Card,
+  DataTable,
+  EmptyState,
+  Icon,
+  PageHeader,
+  StatCard,
+  type Column,
+} from '@/shared/ui';
 import { Can } from '@/shared/authz/Can';
-import { useStudents } from '../api/studentsApi';
+import { useStudents, type StudentRow } from '../api/studentsApi';
 
 export default function StudentsRosterPage() {
+  const navigate = useNavigate();
   const { data, isLoading, error } = useStudents();
-  const count = data?.students.length ?? 0;
+  const students = data?.students ?? [];
+  const count = students.length;
+
+  const columns: Column<StudentRow>[] = [
+    {
+      header: 'Name',
+      cell: (s) => (
+        <div>
+          <span style={{ fontWeight: 600 }}>{s.name}</span>
+          <span className="subtle" style={{ fontSize: 12, marginLeft: 8 }}>{s.login_identifier}</span>
+        </div>
+      ),
+    },
+    { header: 'Admission', cell: (s) => <span className="subtle" style={{ fontSize: 12 }}>#{s.admission_no}</span> },
+    {
+      header: 'Status',
+      cell: (s) => <Badge tone={s.status === 'ACTIVE' ? 'success' : 'neutral'}>{s.status}</Badge>,
+    },
+    {
+      header: '',
+      align: 'right',
+      cell: (s) => (
+        <span className="flex gap-8" style={{ justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            className="icon-btn"
+            title="View"
+            aria-label="View"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/students/${s.id}`);
+            }}
+          >
+            <Icon name="eye" />
+          </button>
+        </span>
+      ),
+    },
+  ];
 
   return (
     <div style={{ maxWidth: 880 }}>
@@ -30,19 +79,23 @@ export default function StudentsRosterPage() {
       </Can>
 
       <Card className="mt-16">
-        {isLoading && <Spinner />}
         {error && <p style={{ color: 'var(--danger)' }}>Failed to load: {String(error)}</p>}
-        {!isLoading && count === 0 && <p className="muted">No students yet. Onboard the first one.</p>}
-        {data?.students.map((s) => (
-          <Link to={`/students/${s.id}`} className="row" key={s.id} style={{ textDecoration: 'none', color: 'inherit' }}>
-            <div style={{ flex: 1 }}>
-              <span style={{ fontWeight: 600 }}>{s.name}</span>
-              <span className="subtle" style={{ fontSize: 12, marginLeft: 8 }}>{s.login_identifier}</span>
-            </div>
-            <span className="subtle" style={{ fontSize: 12 }}>#{s.admission_no}</span>
-            <Badge tone={s.status === 'ACTIVE' ? 'success' : 'neutral'}>{s.status}</Badge>
-          </Link>
-        ))}
+        <DataTable<StudentRow>
+          columns={columns}
+          rows={students}
+          rowKey={(s) => s.id}
+          loading={isLoading}
+          searchable
+          searchText={(s) => `${s.name} ${s.admission_no} ${s.login_identifier} ${s.status} ${s.gender ?? ''}`}
+          onRowClick={(s) => navigate(`/students/${s.id}`)}
+          empty={
+            <EmptyState
+              icon={<Icon name="users" size={28} />}
+              title="No students yet"
+              desc="Onboard the first one."
+            />
+          }
+        />
       </Card>
     </div>
   );

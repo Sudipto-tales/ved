@@ -55,11 +55,22 @@ export default function SubjectsPage() {
           rows={rows}
           rowKey={(r) => r.id}
           onRowClick={(r) => nav(`/subjects/${r.id}`)}
+          searchable
+          searchText={(r) => `${r.name} ${r.code}`}
           empty={<EmptyState icon={<Icon name="book" />} title="No subjects yet" desc="Add the first subject to your catalogue." />}
           columns={[
             { header: 'Name', cell: (r) => <span style={{ fontWeight: 600 }}>{r.name}</span> },
             { header: 'Code', cell: (r) => <span className="subtle">{r.code}</span> },
             { header: 'Kind', cell: (r) => <Badge tone="info">{r.kind}</Badge> },
+            {
+              header: '',
+              align: 'right',
+              cell: (r) => (
+                <span className="flex gap-8" style={{ justifyContent: 'flex-end' }}>
+                  <button type="button" className="icon-btn" title="View" aria-label="View" onClick={(e) => { e.stopPropagation(); nav(`/subjects/${r.id}`); }}><Icon name="eye" /></button>
+                </span>
+              ),
+            },
           ]}
         />
       </Card>

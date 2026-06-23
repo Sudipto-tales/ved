@@ -2,7 +2,7 @@
 // student's append-only ledger. Invoice status is derived on the server, never edited.
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Badge, Card, DataTable, PageHeader, StatCard, type Column } from '@/shared/ui';
+import { Badge, Card, DataTable, Icon, PageHeader, StatCard, type Column } from '@/shared/ui';
 import { useStudents } from '@/features/students/api/studentsApi';
 import { useInvoices, type InvoiceRow } from '../api/financeApi';
 
@@ -39,6 +39,26 @@ export default function InvoicesPage() {
     { header: 'Status', cell: (r) => <Badge tone={STATUS_TONE[r.status] ?? 'neutral'}>{r.status}</Badge> },
     { header: 'Issued', cell: (r) => fmtDate(r.issued_at) },
     { header: 'Due', cell: (r) => fmtDate(r.due_date) },
+    {
+      header: '',
+      align: 'right',
+      cell: (r) => (
+        <span className="flex gap-8" style={{ justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            className="icon-btn"
+            title="View ledger"
+            aria-label="View ledger"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/ledger/${r.student_id}`);
+            }}
+          >
+            <Icon name="eye" />
+          </button>
+        </span>
+      ),
+    },
   ];
 
   return (
@@ -59,6 +79,8 @@ export default function InvoicesPage() {
           rowKey={(r) => r.id}
           empty="No invoices issued yet."
           onRowClick={(r) => navigate(`/ledger/${r.student_id}`)}
+          searchable
+          searchText={(r) => `${r.id} ${names.get(r.student_id) ?? r.student_id} ${r.status}`}
           columns={columns}
         />
       </Card>

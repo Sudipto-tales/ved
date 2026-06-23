@@ -4,7 +4,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueries } from '@tanstack/react-query';
-import { Card, DataTable, PageHeader, Spinner, StatCard, type Column } from '@/shared/ui';
+import { Card, DataTable, Icon, PageHeader, Spinner, StatCard, type Column } from '@/shared/ui';
 import { api } from '@/shared/api/client';
 import { useStudents } from '@/features/students/api/studentsApi';
 import { financeKeys, type Ledger } from '../api/financeApi';
@@ -55,6 +55,38 @@ export default function DuesPage() {
     { header: 'Student', cell: (r) => <span style={{ fontWeight: 600 }}>{r.name}</span> },
     { header: 'Admission #', cell: (r) => <span className="muted">{r.admissionNo}</span> },
     { header: 'Outstanding', align: 'right', cell: (r) => <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600 }}>{inr(r.outstanding)}</span> },
+    {
+      header: '',
+      align: 'right',
+      cell: (r) => (
+        <span className="flex gap-8" style={{ justifyContent: 'flex-end' }}>
+          <button
+            type="button"
+            className="icon-btn"
+            title="View ledger"
+            aria-label="View ledger"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/ledger/${r.studentId}`);
+            }}
+          >
+            <Icon name="eye" />
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            title="Record payment"
+            aria-label="Record payment"
+            onClick={(e) => {
+              e.stopPropagation();
+              navigate(`/ledger/${r.studentId}`);
+            }}
+          >
+            <Icon name="wallet" />
+          </button>
+        </span>
+      ),
+    },
   ];
 
   return (
@@ -74,6 +106,8 @@ export default function DuesPage() {
           rowKey={(r) => r.studentId}
           empty="No outstanding dues. Everyone's settled up."
           onRowClick={(r) => navigate(`/ledger/${r.studentId}`)}
+          searchable
+          searchText={(r) => `${r.name} ${r.admissionNo} ${inr(r.outstanding)} ${r.outstanding}`}
           columns={columns}
         />
       </Card>

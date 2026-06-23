@@ -541,6 +541,11 @@ func provisionTenantPlane(ctx context.Context, pool *pgxpool.Pool, nodeID, tenan
 	if err := students.SeedTenantProfile(ctx, students.NewRepo(pool, nodeID), tenantID, slug, adminName+"'s School"); err != nil {
 		return "", "", err
 	}
+	// Default onboarding templates + dropdown lists so the school's people forms work
+	// out of the box and are immediately customizable (M10).
+	if err := access.SeedTenantSetup(ctx, accessRepo, tenantID); err != nil {
+		return "", "", err
+	}
 	// Every provisioned school needs a current academic year before it can create
 	// sections/exams (full tenant-setup — terms/rooms/multiple years — comes later).
 	if err := academics.SeedDefaultAcademicYear(ctx, onboarding.NewEngine(pool, nodeID), tenantID); err != nil {

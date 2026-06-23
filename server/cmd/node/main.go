@@ -92,6 +92,10 @@ func main() {
 		if err := academics.SeedDefaultAcademicYear(ctx, onboarding.NewEngine(pool, nodeID), devTenant); err != nil {
 			slog.Error("seed academic year", "err", err)
 		}
+		// Default onboarding templates + dropdown lists (M10), idempotent.
+		if err := access.SeedTenantSetup(ctx, accessRepo, devTenant); err != nil {
+			slog.Error("seed tenant setup", "err", err)
+		}
 	}
 
 	// Sync (M6): relay the transactional outbox to JetStream. Tolerant of NATS being

@@ -30,6 +30,16 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    // A 401 on a request we authenticated means the stored token is stale/expired (e.g.
+    // left over from a previous control-plane instance). Don't let it wedge every page:
+    // clear it and send the user back to login. (Skip for the login call itself, where a
+    // 401 is just bad credentials and there's no token to clear.)
+    if (res.status === 401 && token && !path.includes('/platform/login')) {
+      localStorage.removeItem(PLATFORM_TOKEN_KEY);
+      if (typeof location !== 'undefined' && !location.pathname.endsWith('/login')) {
+        location.assign('/login');
+      }
+    }
     throw new ApiError(res.status, text || res.statusText);
   }
   if (res.status === 204 || res.status === 202) return undefined as T;
@@ -39,4 +49,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const api = {
   get: <T>(path: string) => request<T>('GET', path),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, body),
+  patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, body),
+  put: <T>(path: string, body?: unknown) => request<T>('PUT', path, body),
+  del: <T>(path: string) => request<T>('DELETE', path),
 };

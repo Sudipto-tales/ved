@@ -70,12 +70,23 @@ export default function SectionsPage() {
           rows={rows}
           rowKey={(r) => r.id}
           onRowClick={(r) => nav(`/sections/${r.id}`)}
+          searchable
+          searchText={(r) => `${r.name} ${r.stage_name} ${r.program_name}`}
           empty={<EmptyState icon={<Icon name="grid" />} title="No sections yet" desc="Create a section to start enrolling students." />}
           columns={[
             { header: 'Program', cell: (r) => <span className="subtle">{r.program_name}</span> },
             { header: 'Stage', cell: (r) => r.stage_name },
             { header: 'Section', cell: (r) => <span style={{ fontWeight: 600 }}>{r.name}</span> },
             { header: 'Capacity', cell: (r) => r.capacity ?? '—', align: 'right', width: 100 },
+            {
+              header: '',
+              align: 'right',
+              cell: (r) => (
+                <span className="flex gap-8" style={{ justifyContent: 'flex-end' }}>
+                  <button type="button" className="icon-btn" title="View" aria-label="View" onClick={(e) => { e.stopPropagation(); nav(`/sections/${r.id}`); }}><Icon name="eye" /></button>
+                </span>
+              ),
+            },
           ]}
         />
       </Card>

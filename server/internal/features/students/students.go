@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -242,6 +243,20 @@ func (s *Service) Onboard(ctx context.Context, tenantID, actor uuid.UUID, in Onb
 			return err
 		}
 		hlc := onboarding.NowHLC()
+
+		// Enforce the tenant's dynamic onboarding template (M10): any field the admin marked
+		// required must be present. Core fields (name/admission_no) are validated above.
+		present := map[string]bool{
+			"dob": in.DOB != "", "gender": in.Gender != "", "category": in.Category != "",
+			"blood_group": in.BloodGroup != "", "address": len(in.Address) > 0,
+			"prior_school": in.PriorSchool != "", "prior_class": in.PriorClass != "",
+			"guardians": len(in.Guardians) > 0,
+		}
+		if missing, err := s.engine.MissingRequiredFields(ctx, tx, "STUDENT", present); err != nil {
+			return err
+		} else if len(missing) > 0 {
+			return fmt.Errorf("%w: required field(s): %s", ErrInvalidInput, strings.Join(missing, ", "))
+		}
 
 		// Shared identity machinery: login handle + temp password + user + membership + roles.
 		member, err := s.engine.CreateMember(ctx, tx, onboarding.MemberInput{

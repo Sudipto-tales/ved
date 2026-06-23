@@ -183,6 +183,34 @@ func (e *Engine) WriteEventAndAudit(ctx context.Context, tx pgx.Tx, tenantID uui
 	return nil
 }
 
+// MissingRequiredFields enforces the tenant's dynamic onboarding template (M10): it returns
+// the labels of fields the School Admin marked visible+required for this person_type that the
+// caller did NOT supply. `present` maps a field_key → whether the input carried a value. If
+// the tenant has no template rows (un-customized), nothing extra is required (core fields like
+// name/admission_no are still enforced in code by each slice). Runs inside the onboard tx, so
+// RLS already scopes the query to the tenant.
+func (e *Engine) MissingRequiredFields(ctx context.Context, tx pgx.Tx, personType string, present map[string]bool) ([]string, error) {
+	rows, err := tx.Query(ctx,
+		`SELECT field_key, label FROM onboarding_field_config
+		  WHERE person_type = $1 AND visible AND required AND deleted_at IS NULL
+		  ORDER BY ordinal`, personType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var missing []string
+	for rows.Next() {
+		var key, label string
+		if err := rows.Scan(&key, &label); err != nil {
+			return nil, err
+		}
+		if !present[key] {
+			missing = append(missing, label)
+		}
+	}
+	return missing, rows.Err()
+}
+
 // NowHLC returns a fresh Hybrid Logical Clock stamp shared by an aggregate's onboarding
 // writes (docs/08 pillar 5). It delegates to the process-global clock (hlc.SetNode is
 // called at node startup with the node id), so every write is causally ordered and stamps

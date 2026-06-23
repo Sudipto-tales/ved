@@ -97,6 +97,8 @@ func main() {
 	r.Group(func(g chi.Router) {
 		g.Use(platform.Authenticator(tokens))
 		registration.RegisterPlatform(g, regSvc)
+		registration.RegisterPlatformV2(g, regSvc)          // M9 super-admin: analytics, license lifecycle, plans, tenant ops
+		registration.RegisterSettingsReleases(g, r, regSvc) // settings store + app-releases registry (+ public /releases)
 	})
 
 	if err := httpx.Serve(cfg.HTTPAddr, r); err != nil {

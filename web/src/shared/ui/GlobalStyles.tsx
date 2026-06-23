@@ -52,8 +52,8 @@ a{color:inherit;text-decoration:none;}
 input,button,textarea,select{font:inherit;}
 code{font-family:var(--mono);font-size:.92em;}
 
-/* Card — white, 16px radius, faint 1px border + soft elevation (flat yet raised) */
-.card{background:var(--surface);border-radius:var(--radius-lg);border:1px solid var(--border);
+/* Card — white, 16px radius, borderless, soft elevation only (no outlines per design rule) */
+.card{background:var(--surface);border-radius:var(--radius-lg);
   box-shadow:var(--shadow);padding:24px;}
 .card--flat{box-shadow:var(--shadow-sm);}
 
@@ -94,6 +94,27 @@ code{font-family:var(--mono);font-size:.92em;}
 .stat-label{font-size:14px;font-weight:600;color:var(--text);}
 .stat-value{font-size:40px;font-weight:800;letter-spacing:-.02em;line-height:1.1;}
 .stat-accent{color:var(--primary);}
+/* Stat card — tinted icon chip carries the color identity (no borders/rails) */
+.statcard{position:relative;overflow:hidden;}
+.stat-chip{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex:none;}
+.stat-chip svg{width:20px;height:20px;}
+/* Section card with a tinted header strip + leading icon */
+.section-head{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+.section-ico{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none;}
+.section-ico svg{width:18px;height:18px;}
+.section-head h3{font-size:15px;font-weight:700;}
+.section-head .section-sub{font-size:12.5px;color:var(--text-muted);margin-top:1px;}
+/* Collapsible card (Settings) */
+.collapsible-head{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;
+  cursor:pointer;padding:18px 22px;}
+.collapsible-head h3{font-size:15px;font-weight:700;}
+.collapsible-chevron{color:var(--text-subtle);transition:transform .18s ease;font-size:14px;}
+.collapsible-chevron.open{transform:rotate(180deg);}
+.collapsible-body{padding:4px 22px 22px;}
+/* DataTable search box (borderless pill, shadow rule keeps it card-consistent) */
+.table-search{display:flex;align-items:center;gap:8px;height:38px;padding:0 12px;margin-bottom:14px;
+  max-width:340px;border-radius:var(--radius-pill);background:var(--surface-2);color:var(--text-subtle);}
+.table-search input{flex:1;min-width:0;border:none;background:transparent;outline:none;color:var(--text);}
 
 /* Growth delta — arrow + colored % + muted context (no pill, like Minimal) */
 .delta{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;margin-top:10px;}
@@ -110,6 +131,7 @@ code{font-family:var(--mono);font-size:.92em;}
 .badge-success{background:var(--success-weak);color:var(--primary-hover);}
 .badge-warning{background:var(--warning-weak);color:#b76e00;}
 .badge-info{background:var(--info-weak);color:#006c9c;}
+.badge-danger{background:var(--danger-weak);color:#b71d18;}
 
 /* App shell */
 .shell{display:flex;min-height:100vh;}
@@ -145,7 +167,7 @@ code{font-family:var(--mono);font-size:.92em;}
 
 /* Topbar — sticky utility bar above the page (search + actions + avatar) */
 .topbar{height:64px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 24px;
-  background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:20;}
+  background:transparent;position:sticky;top:0;z-index:20;}
 .topbar-search{display:flex;align-items:center;gap:8px;height:38px;padding:0 12px;min-width:200px;
   border-radius:var(--radius-pill);background:var(--surface-2);border:1px solid var(--border);
   color:var(--text-subtle);}
@@ -158,8 +180,21 @@ code{font-family:var(--mono);font-size:.92em;}
   background:var(--danger);color:#fff;font-size:10px;font-weight:800;display:grid;place-items:center;
   box-shadow:0 0 0 2px var(--surface);}
 .avatar{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-size:13px;font-weight:800;
-  color:#fff;background:linear-gradient(135deg,var(--primary),var(--info));
+  color:#fff;background:linear-gradient(135deg,var(--primary),var(--info));border:none;
   box-shadow:0 0 0 2px var(--surface),0 0 0 4px var(--primary-tint);cursor:pointer;}
+
+/* Dropdown menu (topbar profile / language) — borderless, shadow only */
+.menu{position:absolute;top:calc(100% + 8px);right:0;min-width:208px;background:var(--surface);
+  border-radius:var(--radius);box-shadow:var(--shadow-lg, var(--shadow));padding:6px;z-index:50;}
+.menu-head{padding:9px 12px 11px;display:flex;flex-direction:column;gap:2px;}
+.menu-head b{font-size:13.5px;}
+.menu-head span{font-size:12px;color:var(--text-muted);}
+.menu-sep{height:1px;background:var(--border);margin:4px 6px;}
+.menu-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border-radius:var(--radius-sm);
+  background:none;border:0;cursor:pointer;color:var(--text-muted);font-size:13.5px;font-weight:600;text-align:left;}
+.menu-item:hover{background:var(--surface-2);color:var(--text);}
+.menu-item.active{color:var(--text);}
+.menu-item svg{width:16px;height:16px;}
 
 /* Hero banner — deep organic gradient, white type, optional CTA (Minimal welcome card) */
 .hero{position:relative;overflow:hidden;border-radius:var(--radius-lg);padding:40px;color:#fff;

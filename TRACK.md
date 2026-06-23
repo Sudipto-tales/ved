@@ -5,7 +5,68 @@ The single place that records **how far the build has progressed** against the p
 
 **Legend:** ✅ done · 🟡 scaffolded / partial · ⬜ not started
 
-> **YOU ARE HERE:** M8 (LMS) **complete and verified** — the final roadmap milestone, so
+> **YOU ARE HERE:** **M10 (Dynamic onboarding template) complete & verified.** A School Admin
+> can now tailor the people-onboarding forms without a code change (docs/06). Migration
+> `00013_onboarding_template` adds two tenant-scoped + RLS + sync tables: **`onboarding_field_config`**
+> (per person_type, toggles VISIBLE + REQUIRED + label + order over the BUILT-IN OnboardInput
+> fields — the "field-toggle" model, `field_key` always maps to an existing field, no arbitrary
+> columns) and **`dropdown_option`** (admin-managed option lists: GENDER/BLOOD_GROUP/
+> STUDENT_CATEGORY/GUARDIAN_RELATION/DEPARTMENT/DESIGNATION). The `access` slice gains the
+> service+handlers (`tenantsetup.go`): `GET /access/onboarding-template/{type}` (ungated —
+> the forms need it; falls back to code defaults if un-customized), `PUT …` (tenant.settings,
+> golden rule: field upserts + ONE outbox + ONE audit), and `GET/POST/DELETE /access/dropdowns`.
+> The onboarding **engine** gained `MissingRequiredFields`, and students/teachers/staff
+> `Onboard` now reject when a visible+required field is absent (core name/admission_no still
+> enforced in code). Defaults are seeded at provisioning + dev boot (idempotent). FE: a tenant
+> **Onboarding Forms** admin page (per-type visible/required/label editor) + the **Dynamic
+> Dropdowns** page rewired to real CRUD, and the student/teacher/staff onboard forms now render
+> from the template (hide non-visible, mark+validate required, dropdown-backed selects).
+> **Verified:** `go build`/`vet`/`gofmt` clean; **3 new integration tests** green (template
+> seed+save golden rule + non-configurable-field rejected; engine required-field enforcement;
+> dropdown upsert-in-place + RLS isolation + soft-delete) alongside the full suite; both web
+> apps `tsc -b` + `vite build` + `build:platform` clean; **live HTTP smoke** on the node — seeded
+> template (8 student fields) + 20 dropdowns, `PUT` dob→required (204), `POST` dropdown (200),
+> unauth `PUT` 401, and the marquee loop: **onboard with dob missing → 400 "required field(s):
+> Date of Birth", with dob present → 201.** _Next per the plan: **M11** (Login-As/magic-link/
+> plan-versioning/KYC/AutoPay), **M12** (Support tickets + AI chatbot). Carried-forward: the
+> GUARDIAN onboarding template (no form yet); promoting the M9/M10 endpoints into the OpenAPI
+> spec + generated client (both use the manual API clients today, matching their slices)._
+
+> **(prev) M9 (Super-Admin Platform v2) — foundation round complete & verified.**
+> The control-plane super-admin surface (docs/promts.md) went from happy-path-only to an
+> analytics-driven console: a new cp migration (`00004_platform_v2`) adds a **license status
+> state machine** (ACTIVE/SUSPENDED/EXPIRED/CANCELLED + auto-renew + end-of-cycle cancel +
+> `superseded_by`), `payment_proof.clarification_note`, `plan_catalog.annual_price/status`,
+> and `school_registration.reminded_at`. A new `registration/platform_v2.go` adds, all
+> platform-gated: **registration analytics + funnel** (avg-approval-time, approval-rate,
+> volume/day) + Send-Reminder; **payment-proof clarification** (INFO_REQUESTED + note,
+> surfaced to the public status poll) + verification analytics; **license lifecycle** —
+> suspend/resume (mirrors `revoked` for the node), cancel (immediate | end-of-cycle), and
+> extend/change-plan which **re-sign** a fresh license via `license.Sign` and supersede the
+> old row — every license mutation also writes a `control_plane.cp_outbox` push for the node;
+> **subscriptions analytics** (MRR normalized per cycle, ARR, churn, plan popularity, revenue
+> trend) + **plan CRUD** (create/update/duplicate/archive); **tenant enrichment** (plan +
+> license + user-count + subscription join, suspend/resume cascade, billing history); and a
+> composed **dashboard** endpoint. FE: a **Recharts chart kit** (`shared/ui/charts` —
+> FunnelChart/TrendChart/BarSeries/DonutChart/DotChart on design tokens), a grouped sidebar
+> (Dashboard · TENANTS · BILLING · INSIGHTS), a new **Plans & Prices** page, and rebuilt
+> Dashboard/Registrations/PaymentProofs/Licenses/Subscriptions/Tenants pages. **Verified:**
+> `go build`/`go vet`/`gofmt` clean; full integration suite green incl. **4 new M9 tests**
+> (license suspend-mirror + extend re-sign verifies + cp_outbox push; clarification flips
+> status + public poll + settled-row no-op; plan archive leaves the public catalog; analytics
+> aggregates incl. MRR×12=ARR + enriched tenant); both web apps `tsc -b` + `vite build` +
+> `build:platform` clean; **live HTTP smoke** on the control-plane binary — login → all v2
+> endpoints 200, 401 without token, suspend→204→SUSPENDED, extend→new signed license, real
+> dashboard counts (12 tenants, MRR ₹66,666, license distribution Premium 8/Starter 4).
+> _Carried-forward: v2 endpoints use the platform SPA's manual `api.ts` client (consistent
+> with the existing dashboard/tenants/licenses/subscriptions pages) — adding them to
+> `controlplane.yaml` + the generated client is a documentation follow-up. **Deferred to
+> M11** (per the plan): tenant impersonation / "Login As", magic login links, plan
+> versioning / grandfathering, KYC / risk / source tracking, AutoPay. **M10** = dynamic
+> school-admin onboarding template (field-toggle + dropdowns). **M12** = Support tickets +
+> AI chatbot (Support page stays a scaffold; dashboard shows 0 open tickets)._
+
+> **(prev) M8 (LMS) — complete and verified** — the final roadmap milestone, so
 > the whole phased build M0→M8 is now done. The new `learning` slice delivers the
 > content→submit→grade loop: teachers publish **assignments** (+ materials) anchored on a
 > `teaching_assignment`; students **submit** (self-service — resolved from their membership,
@@ -198,6 +259,8 @@ rebuilt. Roadmap (P0–P6) in [docs/22](./docs/22-frontend.md); tokens in [docs/
 | **M6** Sync & Offline | NATS relay + inbox + HLC; wiring, not rewrite | ✅ code-complete (pillars 1–5: real HLC + row-level LWW/tombstone merge, bidirectional cloud→node push-down, offline license-grace state machine); mTLS/per-tenant accounts/WAL = infra, deferred |
 | **M7** Guardian Portal & Mobile | child-scoped read API; Expo read-heavy | ✅ portal + **T2 guarded writes** (pay/leave/contact + maker-checker) + **Expo mobile read app** (login → children → attendance/marks/fees, `tsc` clean) |
 | **M8** LMS | content → assignments → submission/grading | ✅ verified (T3a+T3b: assignments/materials → submit → grade → marks; append-only; T3c deferred) |
+| **M9** Super-Admin Platform v2 | analytics + funnel, license lifecycle, payment clarification, subscriptions/plans, tenant enrichment, dashboard, Recharts kit | ✅ verified (foundation round; Login-As/magic-link/plan-versioning/KYC = M11, onboarding template = M10, support = M12) |
+| **M10** Dynamic onboarding template | school-admin configures per-type field visibility/required + dropdown lists; onboard forms + backend validation honor it | ✅ verified (field-toggle + dropdowns; seeded defaults; live required-field enforcement) |
 
 ---
 
@@ -552,6 +615,57 @@ submission` rejected by trigger; student can't create/grade (403), non-student c
 submit (403).
 **Carried-forward:** T3c (quizzes/discussion/completion), lesson plans, MinIO blob upload,
 student + guardian LMS screens.
+
+## Backend — `server/` (M9 Super-Admin Platform v2) — ✅ verified
+
+The control-plane super-admin surface (docs/promts.md). Plain transactional writes
+(control_plane has no tenant_id/RLS/sync); license mutations also emit a `cp_outbox` push so
+the change can reach the owning node (docs/08). Analytics compute on-the-fly — no new tables.
+
+| Component | File(s) | Status |
+|---|---|---|
+| Migration: `license` status SM (+auto_renew/cancel_at_period_end/cancelled_at/superseded_by, backfill from `revoked`); `payment_proof.clarification_note`; `plan_catalog.annual_price/status`; `school_registration.reminded_at` | `db/cpmigrations/00004_platform_v2.sql` | ✅ applied |
+| Registration analytics + funnel + Send-Reminder | `internal/features/registration/platform_v2.go` | ✅ |
+| Payment-proof clarification (INFO_REQUESTED + note → public poll) + verification analytics | same | ✅ |
+| License lifecycle: suspend/resume (revoked mirror), cancel (immediate \| end-of-cycle), extend/change-plan (**re-sign** via `license.Sign`, supersede) + `cp_outbox` push | same | ✅ |
+| Subscriptions analytics (MRR per-cycle-normalized, ARR, churn, trends, popularity) + plan CRUD (create/update/duplicate/archive) | same | ✅ |
+| Tenant enrichment (plan+license+users+subscription join), suspend/resume cascade, billing history | same | ✅ |
+| Composed dashboard endpoint | same | ✅ |
+| Node wiring (`RegisterPlatformV2` mounted in the platform-gated group) | `cmd/controlplane/main.go` | ✅ |
+| Integration tests (live PG): license suspend-mirror + extend re-sign-verifies + cp_outbox push; clarification flips status + public poll + settled no-op; plan archive hides from catalog; analytics aggregates (MRR×12=ARR, enriched tenant) | `internal/features/registration/platform_v2_integration_test.go` | ✅ pass |
+
+**Frontend (`web/platform/`) — ✅ built.** Recharts chart kit (`web/src/shared/ui/charts.tsx`:
+FunnelChart/TrendChart/BarSeries/DonutChart/DotChart on design tokens) + `+danger` Badge tone;
+grouped sidebar (Dashboard · TENANTS · BILLING · INSIGHTS); new **Plans & Prices** page; and
+rebuilt Dashboard/Registrations/PaymentProofs/Licenses/Subscriptions/Tenants pages wired to a
+shared `platform/src/shared/platformApi.ts` hook surface. `tsc -b` + `vite build` +
+`build:platform` clean.
+**Carried-forward:** v2 endpoints use the SPA's manual `api.ts` client (matching the existing
+platform pages) — promoting them into `controlplane.yaml` + the generated client is a doc
+follow-up. **Deferred:** M10 dynamic onboarding template, M11 Login-As/magic-link/plan-
+versioning/KYC/AutoPay, M12 Support tickets + AI chatbot.
+
+## Backend — `server/` (M10 Dynamic onboarding template) — ✅ verified
+
+A School Admin tailors the people-onboarding forms without a code change (docs/06,
+docs/database/03-tenant-setup.md). Field-toggle model (not arbitrary columns): each
+`field_key` maps to an existing OnboardInput field; config governs the form + required-ness.
+
+| Component | File(s) | Status |
+|---|---|---|
+| Migration: `onboarding_field_config` + `dropdown_option` (tenant-scoped + RLS + sync cols) | `db/migrations/00013_onboarding_template.sql` | ✅ applied |
+| Service + default catalog + seed (Get/Set template, list/upsert/delete dropdowns) — part of the `access` slice | `internal/features/access/tenantsetup.go` | ✅ golden rule per save |
+| Endpoints: `GET /access/onboarding-template/{type}` (ungated; defaults fallback), `PUT` (tenant.settings); `GET/POST/DELETE /access/dropdowns` | `internal/features/access/access.go` | ✅ |
+| Engine `MissingRequiredFields` + students/teachers/staff `Onboard` enforce visible+required | `internal/platform/onboarding/onboarding.go`, `internal/features/{students,teachers,staff}` | ✅ |
+| Seed defaults at provisioning + dev boot (idempotent) | `internal/features/registration/registration.go`, `cmd/node/main.go` | ✅ |
+| Integration tests (live PG): template seed+save golden rule + non-configurable rejected; engine required enforcement; dropdown upsert-in-place + RLS + soft-delete | `internal/features/access/tenantsetup_integration_test.go` | ✅ pass |
+
+**Frontend (`web/`) — ✅ built.** Admin **Onboarding Forms** page (per-type visible/required/
+label editor) + **Dynamic Dropdowns** page rewired to real CRUD (`features/admin/`); student/
+teacher/staff onboard forms render from the template (hide non-visible, mark + client-validate
+required, dropdown-backed selects). `tsc -b` + `vite build` clean.
+**Carried-forward:** GUARDIAN onboarding template (no form yet); M9/M10 endpoints use the
+manual API clients (OpenAPI promotion is a doc follow-up).
 
 ## Frontend — `web/` (M0) — 🟡 architecture scaffolded
 

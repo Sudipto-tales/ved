@@ -661,6 +661,73 @@ func Register(r chi.Router, pool *pgxpool.Pool, nodeID uuid.UUID, res *authz.Res
 			}
 			httpx.JSON(w, http.StatusOK, map[string]any{"academic_years": ys})
 		})
+
+	// ---- Dynamic onboarding template + dropdowns (M10) --------------------------
+	// GETs are UNGATED (authed + tenant only): the onboarding FORMS need them to render,
+	// and form config is not sensitive. Writes require tenant.settings (the admin editor).
+	r.Get("/api/v1/access/onboarding-template/{type}", func(w http.ResponseWriter, req *http.Request) {
+		fields, err := svc.GetOnboardingTemplate(req.Context(), httpx.TenantID(req.Context()), chi.URLParam(req, "type"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"fields": fields})
+	})
+
+	r.With(authz.Require(res, "tenant.settings")).Put("/api/v1/access/onboarding-template/{type}",
+		func(w http.ResponseWriter, req *http.Request) {
+			var in struct {
+				Fields []FieldConfigDTO `json:"fields"`
+			}
+			if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
+				httpx.Error(w, http.StatusBadRequest, "invalid JSON")
+				return
+			}
+			if err := svc.SetOnboardingTemplate(req.Context(), httpx.TenantID(req.Context()), actorID(req),
+				chi.URLParam(req, "type"), in.Fields); err != nil {
+				writeErr(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})
+
+	r.Get("/api/v1/access/dropdowns", func(w http.ResponseWriter, req *http.Request) {
+		opts, err := svc.ListDropdowns(req.Context(), httpx.TenantID(req.Context()))
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"options": opts})
+	})
+
+	r.With(authz.Require(res, "tenant.settings")).Post("/api/v1/access/dropdowns",
+		func(w http.ResponseWriter, req *http.Request) {
+			var in DropdownOptionDTO
+			if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
+				httpx.Error(w, http.StatusBadRequest, "invalid JSON")
+				return
+			}
+			id, err := svc.UpsertDropdown(req.Context(), httpx.TenantID(req.Context()), actorID(req), in)
+			if err != nil {
+				writeErr(w, err)
+				return
+			}
+			httpx.JSON(w, http.StatusOK, map[string]any{"id": id})
+		})
+
+	r.With(authz.Require(res, "tenant.settings")).Delete("/api/v1/access/dropdowns/{id}",
+		func(w http.ResponseWriter, req *http.Request) {
+			id, err := uuid.Parse(chi.URLParam(req, "id"))
+			if err != nil {
+				httpx.Error(w, http.StatusBadRequest, "invalid id")
+				return
+			}
+			if err := svc.DeleteDropdown(req.Context(), httpx.TenantID(req.Context()), actorID(req), id); err != nil {
+				writeErr(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})
 }
 
 // actorID is the caller's membership id in the active tenant (audit actor / created_by).
