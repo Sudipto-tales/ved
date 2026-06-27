@@ -1,0 +1,71 @@
+# Global search slice — the navbar command palette's entity source. ONE endpoint
+# fans out across domain entities; an entity is included only if the caller holds
+# its `.read` permission (enforced server-side). Mirrors
+# internal/features/search/search.go.
+openapi: 3.1.0
+info:
+  title: VED search slice
+  version: 1.0.0
+paths: {}
+
+GlobalSearch:
+  get:
+    operationId: globalSearch
+    summary: Permission-scoped global search across tenant entities
+    description: >
+      Searches students, teachers, staff and guardians and returns hits grouped by
+      type. An entity is queried only if the caller's effective permissions include
+      that entity's `.read` (tenant.admin sees all). RLS additionally scopes results
+      to the active tenant. The `types` filter can only narrow the permitted set.
+      Queries shorter than 2 characters return empty. Clients should debounce ~250ms.
+    tags: [search]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - name: q
+        in: query
+        required: true
+        description: Search text (min 2 chars; matched against names/codes).
+        schema: { type: string }
+      - name: types
+        in: query
+        required: false
+        description: Comma-separated entity types to narrow the search (e.g. "student,teacher").
+        schema: { type: string }
+      - name: limit
+        in: query
+        required: false
+        description: Per-entity result cap (default 5, max 10).
+        schema: { type: integer, minimum: 1, maximum: 10 }
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Hits grouped by entity type (only permitted types present).
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/SearchResponse' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+schemas:
+  SearchHit:
+    type: object
+    required: [type, id, label, sublabel, url, score]
+    properties:
+      type: { type: string, description: "Entity type, e.g. student | teacher | staff | guardian." }
+      id: { type: string, format: uuid }
+      label: { type: string, description: "Primary line (name)." }
+      sublabel: { type: string, description: "Secondary line (admission_no / employee_code / phone)." }
+      url: { type: string, description: "Frontend deep link, e.g. /students/{id}." }
+      score: { type: number, description: "Relevance: 1.0 exact > 0.7 prefix > 0.4 substring." }
+
+  SearchResponse:
+    type: object
+    required: [query, groups]
+    properties:
+      query: { type: string }
+      groups:
+        type: object
+        additionalProperties:
+          type: array
+          items: { $ref: '#/schemas/SearchHit' }

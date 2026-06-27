@@ -6,6 +6,25 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Badge, Button, EmptyState, Icon, PageHeader, SectionCard, Spinner } from '@/shared/ui';
 import { useApprove, useRegistration, useReject, type ApproveResult } from './api';
+import { tenantUrl, useSetKYC } from '../../shared/platformApi';
+
+const KYC_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = {
+  VERIFIED: 'success',
+  PENDING: 'warning',
+  REJECTED: 'danger',
+};
+
+const RISK_TONE: Record<string, 'neutral' | 'warning' | 'danger'> = {
+  LOW: 'neutral',
+  MEDIUM: 'warning',
+  HIGH: 'danger',
+};
+
+function riskBand(score: number): 'LOW' | 'MEDIUM' | 'HIGH' {
+  if (score >= 67) return 'HIGH';
+  if (score >= 34) return 'MEDIUM';
+  return 'LOW';
+}
 
 const STATUS_TONE: Record<string, 'success' | 'neutral' | 'warning'> = {
   ACTIVE: 'success',
@@ -22,10 +41,12 @@ export default function RegistrationDetailPage() {
   const { data, isLoading, error } = useRegistration(id);
   const approve = useApprove();
   const reject = useReject();
+  const setKYC = useSetKYC();
   const [provisioned, setProvisioned] = useState<ApproveResult | null>(null);
 
   const reg = data?.registration;
   const proof = data?.proof;
+  const kyc = data?.kyc;
   const reviewable = reg?.status === 'PENDING_PAYMENT_REVIEW';
 
   return (
@@ -47,7 +68,15 @@ export default function RegistrationDetailPage() {
           <div className="row"><span className="muted">Temp password</span><code>{provisioned.admin_temp_password}</code></div>
           <div className="row"><span className="muted">Invoice</span><span>{provisioned.invoice_number}</span></div>
           <div className="row"><span className="muted">License</span><Badge tone="success">issued</Badge></div>
-          <p className="subtle" style={{ fontSize: 12, marginTop: 8 }}>Hand these credentials to the school admin — shown once.</p>
+          {provisioned.magic_token && (
+            <div className="row">
+              <span className="muted">Activation link</span>
+              <a href={`${tenantUrl(provisioned.slug)}/activate?token=${provisioned.magic_token}`} target="_blank" rel="noreferrer">
+                <code style={{ wordBreak: 'break-all' }}>{`${tenantUrl(provisioned.slug)}/activate?token=${provisioned.magic_token}`}</code>
+              </a>
+            </div>
+          )}
+          <p className="subtle" style={{ fontSize: 12, marginTop: 8 }}>Hand these credentials (or the one-click activation link) to the school admin — shown once.</p>
           <div className="mt-16"><Button variant="ghost" onClick={() => setProvisioned(null)}>Dismiss</Button></div>
         </SectionCard>
       )}
@@ -82,6 +111,60 @@ export default function RegistrationDetailPage() {
               </>
             )}
           </SectionCard>
+
+          <div style={{ gridColumn: '1 / -1' }}>
+          <SectionCard icon="shield" title="KYC & risk" tone="info">
+            {!kyc && <p className="muted">No KYC data submitted yet.</p>}
+            {kyc && (
+              <>
+                <div className="row">
+                  <span className="muted">Status</span>
+                  <Badge tone={KYC_TONE[kyc.status] ?? 'neutral'}>{kyc.status}</Badge>
+                </div>
+                <div className="row">
+                  <span className="muted">Risk score</span>
+                  <span className="flex gap-8" style={{ alignItems: 'center' }}>
+                    <Badge tone={RISK_TONE[riskBand(kyc.risk_score)]}>{riskBand(kyc.risk_score)}</Badge>
+                    <span>{kyc.risk_score}</span>
+                  </span>
+                </div>
+                {kyc.business_reg && <div className="row"><span className="muted">Business reg.</span><code>{kyc.business_reg}</code></div>}
+                {kyc.gst && <div className="row"><span className="muted">GST</span><code>{kyc.gst}</code></div>}
+                <div className="row"><span className="muted">Source</span><span>{kyc.source}{kyc.source_detail ? ` · ${kyc.source_detail}` : ''}</span></div>
+                {kyc.notes && <div className="row"><span className="muted">Notes</span><span>{kyc.notes}</span></div>}
+                {kyc.risk_factors.length > 0 && (
+                  <div className="mt-16">
+                    <span className="muted" style={{ fontSize: 12 }}>Risk factors</span>
+                    <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 13 }}>
+                      {kyc.risk_factors.map((f: string) => (
+                        <li key={f}>{f}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <div className="flex gap-8 mt-16">
+                  <Button
+                    disabled={setKYC.isPending || kyc.status === 'VERIFIED'}
+                    onClick={() => setKYC.mutate({ id, status: 'VERIFIED' })}
+                  >
+                    {setKYC.isPending ? 'Saving…' : 'Verify KYC'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    disabled={setKYC.isPending || kyc.status === 'REJECTED'}
+                    onClick={() => {
+                      const notes = prompt('Reason for rejecting KYC?') || undefined;
+                      setKYC.mutate({ id, status: 'REJECTED', notes });
+                    }}
+                  >
+                    Reject KYC
+                  </Button>
+                </div>
+                {setKYC.error && <p style={{ color: 'var(--danger)', fontSize: 13, marginTop: 8 }}>{String(setKYC.error)}</p>}
+              </>
+            )}
+          </SectionCard>
+          </div>
         </div>
       )}
 

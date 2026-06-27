@@ -24,6 +24,10 @@ export function VedLogo({ size = 28 }: { size?: number }) {
   );
 }
 export { GlobalStyles } from './GlobalStyles';
+export { CommandPalette } from './CommandPalette';
+export { useCommandSearch } from './useCommandSearch';
+export type { UseCommandSearch } from './useCommandSearch';
+export { useCommandHotkey } from './useGlobalHotkey';
 export { TrendChart, BarSeries, DonutChart, FunnelChart, DotChart, CHART_COLORS } from './charts';
 export type { Point } from './charts';
 

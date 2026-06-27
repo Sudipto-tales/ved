@@ -4,9 +4,10 @@
 // notifications, contacts, settings, profile).
 import { useEffect, useRef, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { Icon, VedLogo, type IconName } from '@/shared/ui';
+import { Icon, VedLogo, useCommandHotkey, type IconName } from '@/shared/ui';
 import { platformPages } from '../routes';
 import { usePlatformAuth } from '../shared/auth';
+import { PlatformCommandPalette } from './search/PlatformCommandPalette';
 
 const ICONS: Record<string, IconName> = {
   dashboard: 'grid',
@@ -39,6 +40,9 @@ export function PlatformShell() {
   const loc = useLocation();
   const navigate = useNavigate();
   const nav = platformPages.filter((p) => p.nav);
+
+  const [searchOpen, setSearchOpen] = useState(false);
+  useCommandHotkey(() => setSearchOpen(true));
 
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === '1');
   const toggleCollapsed = () => {
@@ -125,11 +129,16 @@ export function PlatformShell() {
             <Icon name="menu" />
           </button>
 
-          <label className="topbar-search">
+          <button
+            type="button"
+            className="topbar-search"
+            onClick={() => setSearchOpen(true)}
+            aria-label="Search (Cmd/Ctrl+K)"
+          >
             <Icon name="search" size={16} />
-            <input placeholder="Search…" aria-label="Search" />
+            <span className="ts-placeholder">Search…</span>
             <span className="kbd">⌘K</span>
-          </label>
+          </button>
 
           <div className="spacer" />
 
@@ -201,6 +210,8 @@ export function PlatformShell() {
           <Outlet />
         </main>
       </div>
+
+      <PlatformCommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

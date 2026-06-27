@@ -1,7 +1,7 @@
 // Subscriptions — revenue & customer analytics for the platform super-admin. Read-only over
 // GET /api/v1/platform/subscriptions/analytics. License health lives on the Licenses page.
 import { BarSeries, DonutChart, PageHeader, SectionCard, Spinner, StatCard, TrendChart } from '@/shared/ui';
-import { useSubscriptionAnalytics } from '../../shared/platformApi';
+import { useAutoPayAnalytics, useSubscriptionAnalytics } from '../../shared/platformApi';
 import { PlansPanel } from '../plans/PlansPage';
 
 const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
@@ -11,6 +11,8 @@ const CHARTS_GRID = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, mi
 
 export default function SubscriptionsPage() {
   const { data, isLoading, error } = useSubscriptionAnalytics();
+  const autopay = useAutoPayAnalytics();
+  const ap = autopay.data;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -49,6 +51,32 @@ export default function SubscriptionsPage() {
           </div>
         </>
       )}
+
+      {/* AutoPay — recurring-billing adoption & health (M11) */}
+      <SectionCard icon="wallet" title="AutoPay" subtitle="recurring-billing adoption & health" tone="info">
+        {autopay.error && <p style={{ color: 'var(--danger)' }}>Failed to load: {String(autopay.error)}</p>}
+        <div style={KPI_GRID}>
+          <StatCard
+            label="Adoption"
+            tone="success"
+            icon="wallet"
+            value={autopay.isLoading ? <Spinner /> : ap ? `${ap.adoption_pct}%` : '—'}
+            delta={ap ? { value: `${ap.enabled}/${ap.active_subscriptions}`, dir: 'up', ctx: 'enabled' } : undefined}
+          />
+          <StatCard
+            label="Failed Payments"
+            tone="danger"
+            icon="chart"
+            value={autopay.isLoading ? <Spinner /> : ap ? `${ap.failed_pct}%` : '—'}
+          />
+          <StatCard
+            label="Renewal Success"
+            tone="primary"
+            icon="shield"
+            value={autopay.isLoading ? <Spinner /> : ap ? `${ap.renewal_success_pct}%` : '—'}
+          />
+        </div>
+      </SectionCard>
 
       {/* Plans & Prices — managed inline here; no separate page */}
       <PlansPanel />

@@ -15,6 +15,7 @@ import (
 	"github.com/weloin/ved/internal/features/platform"
 	"github.com/weloin/ved/internal/features/registration"
 	"github.com/weloin/ved/internal/features/synchub"
+	"github.com/weloin/ved/internal/platform/auth"
 	"github.com/weloin/ved/internal/platform/bus"
 	"github.com/weloin/ved/internal/platform/config"
 	"github.com/weloin/ved/internal/platform/db"
@@ -55,6 +56,9 @@ func main() {
 	platSvc := platform.NewService(platRepo, tokens)
 	signer := license.NewSigner(cfg.LicenseSigningKey)
 	regSvc := registration.NewService(pool, nodeID, signer)
+	// Node-compatible token manager: "Login As Tenant" (M11) mints tenant access tokens the
+	// node accepts, so it must sign with the SAME secret the node verifies with (JWT_SECRET).
+	nodeTokens := auth.NewManager(cfg.JWTSecret)
 
 	if cfg.DevSeed {
 		if err := platform.SeedSuperAdmin(ctx, platRepo); err != nil {
@@ -62,6 +66,10 @@ func main() {
 		}
 		if err := platform.SeedPlans(ctx, platRepo); err != nil {
 			slog.Error("seed plans", "err", err)
+		}
+		// M11: every plan needs a version-1 price point for grandfathered pricing.
+		if err := registration.EnsurePlanVersions(ctx, pool); err != nil {
+			slog.Error("ensure plan versions", "err", err)
 		}
 	}
 
@@ -97,8 +105,13 @@ func main() {
 	r.Group(func(g chi.Router) {
 		g.Use(platform.Authenticator(tokens))
 		registration.RegisterPlatform(g, regSvc)
-		registration.RegisterPlatformV2(g, regSvc)          // M9 super-admin: analytics, license lifecycle, plans, tenant ops
-		registration.RegisterSettingsReleases(g, r, regSvc) // settings store + app-releases registry (+ public /releases)
+		registration.RegisterPlatformV2(g, regSvc)                        // M9 super-admin: analytics, license lifecycle, plans, tenant ops
+		registration.RegisterPlatformM11(g, regSvc)                       // M11 super-admin: KYC review + risk/source analytics
+		registration.RegisterPlatformImpersonation(g, regSvc, nodeTokens) // M11: Login As Tenant
+		registration.RegisterPlatformPlanVersions(g, regSvc)              // M11: plan versioning / grandfathered pricing
+		registration.RegisterPlatformAutoPay(g, regSvc)                   // M11: AutoPay toggle + analytics
+		registration.RegisterPlatformSearch(g, regSvc)                    // global search (navbar command palette)
+		registration.RegisterSettingsReleases(g, r, regSvc)               // settings store + app-releases registry (+ public /releases)
 	})
 
 	if err := httpx.Serve(cfg.HTTPAddr, r); err != nil {

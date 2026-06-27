@@ -197,6 +197,29 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '500': { $ref: '#/components/responses/Internal' }
 
+  /api/v1/platform/search:
+    get:
+      operationId: platformSearch
+      summary: Permission-scoped global search across control-plane entities
+      tags: [platform]
+      description: >
+        Searches registrations, tenants, subscriptions, plans and licenses, grouped
+        by type. An entity is queried only if the caller is permitted to manage it
+        (today: superadmin only). The `types` filter can only narrow the permitted
+        set. Queries shorter than 2 characters return empty. Debounce ~250ms.
+      parameters:
+        - { name: q, in: query, required: true, description: "Search text (min 2 chars).", schema: { type: string } }
+        - { name: types, in: query, required: false, description: "Comma-separated entity types to narrow.", schema: { type: string } }
+        - { name: limit, in: query, required: false, description: "Per-entity cap (default 5, max 10).", schema: { type: integer, minimum: 1, maximum: 10 } }
+      responses:
+        '200':
+          description: Hits grouped by entity type (only permitted types present).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PlatformSearchResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '500': { $ref: '#/components/responses/Internal' }
+
 components:
   securitySchemes:
     platformBearer:
@@ -215,6 +238,28 @@ components:
 
   schemas:
     Error: { type: object, required: [error], properties: { error: { type: string } } }
+
+    PlatformSearchHit:
+      type: object
+      required: [type, id, label, sublabel, url, score]
+      properties:
+        type: { type: string, description: "registration | tenant | subscription | plan | license" }
+        id: { type: string, format: uuid }
+        label: { type: string }
+        sublabel: { type: string }
+        url: { type: string }
+        score: { type: number }
+
+    PlatformSearchResponse:
+      type: object
+      required: [query, groups]
+      properties:
+        query: { type: string }
+        groups:
+          type: object
+          additionalProperties:
+            type: array
+            items: { $ref: '#/components/schemas/PlatformSearchHit' }
 
     Plan:
       type: object

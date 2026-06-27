@@ -5,7 +5,42 @@ The single place that records **how far the build has progressed** against the p
 
 **Legend:** ✅ done · 🟡 scaffolded / partial · ⬜ not started
 
-> **YOU ARE HERE:** **M10 (Dynamic onboarding template) complete & verified.** A School Admin
+> **YOU ARE HERE:** **M11 (Login-As · Magic-Link · Plan-Versioning · KYC · AutoPay) — backend
+> + frontend complete; live DB verification PENDING.** The five deferred super-admin/platform
+> features (docs/promts.md) are built as five vertical slices. **Slice A — KYC/Risk/Source**
+> (`cp/00006`): `school_registration` gains kyc_status/business_reg/gst/notes + risk_score
+> (auto-triaged at register: free-email domain → MEDIUM, >5 sign-ups/hr → HIGH, dup phone) +
+> risk_factors + source (WEBSITE/REFERRAL/CAMPAIGN/DIRECT); superadmin `POST …/kyc` verify/reject
+> + `kyc-analytics`. **Slice B — Login-As** (`00014` tenant + `cp/00007`): impersonation is
+> TENANT-CONSENTED (`tenant_profile.allow_superadmin_access`, the school admin toggles it,
+> golden rule) — `POST /platform/tenants/{id}/login-as` mints a SHORT-LIVED (30-min)
+> node-compatible access token (`auth.IssueImpersonation`, new `imp` claim) for the tenant's
+> School Admin, gated by consent, audited to a new `cp_audit_log`. Passwords are never shown.
+> **Slice C — Magic Link** (`00015`): provisioning mints a one-time `activation_token` (hash
+> stored; raw returned in ApproveResult); node public `POST /auth/activate` (controlled-bypass
+> `auth_activation` SECURITY DEFINER) consumes it single-use → logs the admin in (still forced
+> to reset). **Slice D — Plan versioning** (`cp/00008`): immutable `plan_version` chain +
+> `subscription.plan_version_id` pin → new subscribers get the latest version, existing stay
+> **grandfathered**; `GET/POST /platform/plans/{id}/versions` with per-version subscriber counts
+> + price diff; catalog headline rolls forward on a new version. **Slice E — AutoPay**
+> (`cp/00009`): `subscription.autopay_enabled` + last_status/failed_count; toggle +
+> adoption/failed/renewal analytics; surfaced on the enriched tenant row. FE (platform SPA,
+> manual `platformApi.ts`): KYC/risk/source columns + KYC verify + magic-link shown at approval;
+> **Login As** button (opens `tenantUrl/#login-as=<token>`); AutoPay column/toggle + analytics
+> cards; Plans version-history panel + new-version form. Tenant app: super-admin-access consent
+> toggle + a public **/activate** page (magic-link + impersonation-hash handoff).
+> **Verified:** `go build`/`go vet -tags=integration`/`gofmt` clean across the module; both web
+> apps `tsc -b` + `vite build` + `build:platform` clean (EXIT 0). **5 new integration tests
+> WRITTEN** (risk scoring + KYC decision; consent-gated login-as token + audit; magic-link
+> single-use; plan grandfathering; autopay analytics) — _compile-verified only._ **PENDING: the
+> live integration run + HTTP smoke** — the dev Postgres port (5432) was held by an unrelated
+> container this session, so `./ved.sh test` couldn't bind; run it once the port is free.
+> _Next: live-verify M11, then **M12** (Support tickets + AI chatbot). Carried-forward: M11
+> endpoints use the manual API clients (OpenAPI promotion is a doc follow-up); cross-subdomain
+> impersonation-token handoff via URL hash (tighten to a one-time code later); GUARDIAN
+> onboarding template._
+
+> **(prev) M10 (Dynamic onboarding template) complete & verified.** A School Admin
 > can now tailor the people-onboarding forms without a code change (docs/06). Migration
 > `00013_onboarding_template` adds two tenant-scoped + RLS + sync tables: **`onboarding_field_config`**
 > (per person_type, toggles VISIBLE + REQUIRED + label + order over the BUILT-IN OnboardInput
@@ -261,6 +296,7 @@ rebuilt. Roadmap (P0–P6) in [docs/22](./docs/22-frontend.md); tokens in [docs/
 | **M8** LMS | content → assignments → submission/grading | ✅ verified (T3a+T3b: assignments/materials → submit → grade → marks; append-only; T3c deferred) |
 | **M9** Super-Admin Platform v2 | analytics + funnel, license lifecycle, payment clarification, subscriptions/plans, tenant enrichment, dashboard, Recharts kit | ✅ verified (foundation round; Login-As/magic-link/plan-versioning/KYC = M11, onboarding template = M10, support = M12) |
 | **M10** Dynamic onboarding template | school-admin configures per-type field visibility/required + dropdown lists; onboard forms + backend validation honor it | ✅ verified (field-toggle + dropdowns; seeded defaults; live required-field enforcement) |
+| **M11** Login-As · Magic-Link · Plan-Versioning · KYC · AutoPay | tenant-consented impersonation, one-time activation links, grandfathered pricing, registration KYC/risk/source, AutoPay analytics | 🟡 backend+FE built & compile/typecheck-clean (5 integration tests written); **live DB run + HTTP smoke pending** (port 5432 held this session) |
 
 ---
 
@@ -666,6 +702,41 @@ teacher/staff onboard forms render from the template (hide non-visible, mark + c
 required, dropdown-backed selects). `tsc -b` + `vite build` clean.
 **Carried-forward:** GUARDIAN onboarding template (no form yet); M9/M10 endpoints use the
 manual API clients (OpenAPI promotion is a doc follow-up).
+
+## Backend — `server/` (M11 Login-As/Magic-Link/Plan-Versioning/KYC/AutoPay) — 🟡 built, live-verify pending
+
+The five deferred platform features (docs/promts.md), each a vertical slice. Control-plane
+writes are plain transactional (no tenant_id/RLS/sync); tenant-plane writes follow the golden
+rule. Cross-plane: Login-As mints a node token (shared `JWT_SECRET`), Magic-Link writes a
+tenant-plane token at provisioning.
+
+| Component | File(s) | Status |
+|---|---|---|
+| **A** KYC/Risk/Source: `school_registration` enrichment; risk auto-scored at register; superadmin KYC verify/reject + analytics | `db/cpmigrations/00006_registration_kyc.sql`, `internal/features/registration/{registration.go,platform_m11.go}` | ✅ built |
+| **B** Login-As: tenant-consent flag + toggle (golden rule); `IssueImpersonation` + `imp` claim; `login-as` mints scoped 30-min token; `cp_audit_log` | `db/migrations/00014_superadmin_access.sql`, `db/cpmigrations/00007_cp_audit.sql`, `internal/platform/auth/jwt.go`, `internal/platform/httpx/auth.go`, `internal/features/access/tenantsetup.go`, `internal/features/registration/impersonation.go` | ✅ built |
+| **C** Magic Link: one-time `activation_token` (+ `auth_activation` SECURITY DEFINER); minted at provisioning; node `POST /auth/activate` single-use | `db/migrations/00015_activation_token.sql`, `internal/platform/credential/credential.go`, `internal/features/identity/identity.go`, `internal/features/registration/registration.go` | ✅ built |
+| **D** Plan versioning: `plan_version` chain + `subscription.plan_version_id` pin (grandfathering); version CRUD + per-version counts; catalog roll-forward; backfill + boot ensure | `db/cpmigrations/00008_plan_versions.sql`, `internal/features/registration/{plan_versions.go,platform_v2.go}` | ✅ built |
+| **E** AutoPay: `subscription` autopay cols; toggle + adoption/failed/renewal analytics; on enriched tenant row | `db/cpmigrations/00009_autopay.sql`, `internal/features/registration/{autopay.go,platform_v2.go}` | ✅ built |
+| Node wiring (`RegisterPlatformM11`/`Impersonation`/`PlanVersions`/`AutoPay`, `nodeTokens`, `EnsurePlanVersions`) | `cmd/controlplane/main.go` | ✅ |
+| Integration tests (5): risk+KYC; consent-gated login-as token+audit; magic-link single-use; plan grandfathering; autopay analytics | `internal/features/registration/*_integration_test.go` | 🟡 written, **not yet run live** |
+
+**Frontend (`web/platform/` + `web/`) — ✅ built & typecheck/build-clean.** Platform SPA wired
+via the manual `platformApi.ts` hook surface: Registrations KYC/risk/source columns + KYC
+verify + magic-link at approval; Tenants **Login As** + AutoPay toggle; Subscriptions AutoPay
+cards; Plans version-history panel + new-version form. Tenant app: super-admin-access consent
+toggle (`access/superadmin-access`) + public **/activate** page (magic-link + `#login-as=` hash
+handoff). `tsc -b` + `vite build` + `build:platform` all EXIT 0.
+
+**Verification status.** `go build`/`go vet -tags=integration`/`gofmt` clean module-wide; both
+web apps typecheck + build clean. **DB-free `go test ./...` green**, incl. **2 new unit tests
+that DO run** — `auth.IssueImpersonation` (token parses as a node token, carries the `imp`
+claim, <1h expiry, no must-reset) and `credential.ActivationToken`/`HashToken` (hash=sha256(raw),
+single-use-distinct). **NOT yet done:** the live integration run (`./ved.sh test`)
++ live HTTP smoke — blocked this session because port 5432 was held by an unrelated container
+(`employee-tracker-db`), so the dev Postgres couldn't bind. **To close M11:** free 5432, run
+`./ved.sh test ./internal/features/registration/... ./internal/features/identity/...` (expect
+the 5 new tests green) + a live curl smoke (register→risk, set consent→login-as token,
+activate→login, create plan version→grandfathered, toggle autopay).
 
 ## Frontend — `web/` (M0) — 🟡 architecture scaffolded
 

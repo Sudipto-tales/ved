@@ -35,5 +35,14 @@ export const authPages: PageDef[] = [
     status: 'done',
     element: () => import('./pages/NoAccessPage'),
   },
+  {
+    // M11: magic-link activation + super-admin impersonation landing.
+    path: 'activate',
+    title: 'Activate',
+    persona: 'PUBLIC',
+    tier: 'T1',
+    status: 'done',
+    element: () => import('./pages/ActivatePage'),
+  },
   // Planned: forgot-password, setup-link landing.
 ];

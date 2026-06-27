@@ -30,6 +30,19 @@ const STATUS_TONE: Record<string, 'success' | 'neutral' | 'warning' | 'danger'> 
   SUSPENDED: 'warning',
 };
 
+// M11: KYC review surfaces a coarse risk band and the lead's acquisition source.
+const RISK_TONE: Record<string, 'neutral' | 'warning' | 'danger'> = {
+  LOW: 'neutral',
+  MEDIUM: 'warning',
+  HIGH: 'danger',
+};
+
+const KYC_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = {
+  VERIFIED: 'success',
+  PENDING: 'warning',
+  REJECTED: 'danger',
+};
+
 type FilterId = 'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'UNDER_REVIEW';
 
 const FILTER_TABS: { id: FilterId; label: string }[] = [
@@ -113,6 +126,28 @@ export default function RegistrationsPage() {
       ),
     },
     {
+      header: 'KYC',
+      cell: (r) =>
+        r.kyc_status ? (
+          <Badge tone={KYC_TONE[r.kyc_status] ?? 'neutral'}>{r.kyc_status}</Badge>
+        ) : (
+          <span className="muted">—</span>
+        ),
+    },
+    {
+      header: 'Risk',
+      cell: (r) =>
+        r.risk_score ? (
+          <Badge tone={RISK_TONE[r.risk_score] ?? 'neutral'}>{r.risk_score}</Badge>
+        ) : (
+          <span className="muted">—</span>
+        ),
+    },
+    {
+      header: 'Source',
+      cell: (r) => (r.source ? <span style={{ fontSize: 13 }}>{r.source}</span> : <span className="muted">—</span>),
+    },
+    {
       header: '',
       align: 'right',
       cell: (r) =>
@@ -188,7 +223,7 @@ export default function RegistrationsPage() {
           rowKey={(r) => r.id}
           loading={isLoading}
           searchable
-          searchText={(r) => `${r.school_name} ${r.slug} ${r.admin_name} ${r.admin_email} ${r.status}`}
+          searchText={(r) => `${r.school_name} ${r.slug} ${r.admin_name} ${r.admin_email} ${r.status} ${r.kyc_status ?? ''} ${r.risk_score ?? ''} ${r.source ?? ''}`}
           empty="No registrations match this filter."
           onRowClick={(r) => navigate(`/registrations/${r.id}`)}
         />

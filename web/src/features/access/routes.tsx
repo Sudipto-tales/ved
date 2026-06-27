@@ -41,4 +41,14 @@ export const accessPages: PageDef[] = [
     nav: true,
     element: () => import('./pages/MakerCheckerPage'),
   },
+  {
+    path: 'access/superadmin-access',
+    title: 'Super-Admin Access',
+    persona: 'ADMIN',
+    permission: 'tenant.settings',
+    tier: 'T1',
+    status: 'done',
+    nav: true,
+    element: () => import('./pages/SuperAdminAccessPage'),
+  },
 ];

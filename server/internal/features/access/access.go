@@ -728,6 +728,34 @@ func Register(r chi.Router, pool *pgxpool.Pool, nodeID uuid.UUID, res *authz.Res
 			}
 			w.WriteHeader(http.StatusNoContent)
 		})
+
+	// Super-admin access consent (M11 "Login As Tenant"). Tenant-owned: only a tenant
+	// admin reads/sets whether platform support may impersonate them.
+	r.With(authz.Require(res, "tenant.settings")).Get("/api/v1/access/superadmin-access",
+		func(w http.ResponseWriter, req *http.Request) {
+			allowed, err := svc.GetSuperadminAccess(req.Context(), httpx.TenantID(req.Context()))
+			if err != nil {
+				writeErr(w, err)
+				return
+			}
+			httpx.JSON(w, http.StatusOK, map[string]any{"allow_superadmin_access": allowed})
+		})
+
+	r.With(authz.Require(res, "tenant.settings")).Put("/api/v1/access/superadmin-access",
+		func(w http.ResponseWriter, req *http.Request) {
+			var in struct {
+				AllowSuperadminAccess bool `json:"allow_superadmin_access"`
+			}
+			if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
+				httpx.Error(w, http.StatusBadRequest, "invalid JSON")
+				return
+			}
+			if err := svc.SetSuperadminAccess(req.Context(), httpx.TenantID(req.Context()), actorID(req), in.AllowSuperadminAccess); err != nil {
+				writeErr(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})
 }
 
 // actorID is the caller's membership id in the active tenant (audit actor / created_by).

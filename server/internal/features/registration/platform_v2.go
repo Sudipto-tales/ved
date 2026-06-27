@@ -564,12 +564,19 @@ func (s *Service) CreatePlan(ctx context.Context, in PlanInput) (uuid.UUID, erro
 		modules = json.RawMessage("[]")
 	}
 	id := uuid.Must(uuid.NewV7())
-	_, err := s.pool.Exec(ctx,
-		`INSERT INTO control_plane.plan_catalog
-		   (id, name, tier, currency, price, annual_price, billing_cycle, seats, enabled_modules, is_active, status)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,'ACTIVE')`,
-		id, in.Name, coalesce(in.Tier, "T1"), coalesce(in.Currency, "INR"), in.Price, in.AnnualPrice,
-		in.BillingCycle, in.Seats, modules)
+	currency := coalesce(in.Currency, "INR")
+	// Plan + its version-1 price point commit together (M11).
+	err := inTx(ctx, s.pool, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO control_plane.plan_catalog
+			   (id, name, tier, currency, price, annual_price, billing_cycle, seats, enabled_modules, is_active, status)
+			 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,'ACTIVE')`,
+			id, in.Name, coalesce(in.Tier, "T1"), currency, in.Price, in.AnnualPrice,
+			in.BillingCycle, in.Seats, modules); err != nil {
+			return err
+		}
+		return insertPlanVersionV1(ctx, tx, id, in.Price, in.AnnualPrice, currency)
+	})
 	return id, err
 }
 
@@ -596,17 +603,26 @@ func (s *Service) UpdatePlan(ctx context.Context, id uuid.UUID, in PlanInput) er
 
 func (s *Service) DuplicatePlan(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
 	newID := uuid.Must(uuid.NewV7())
-	ct, err := s.pool.Exec(ctx,
-		`INSERT INTO control_plane.plan_catalog
-		   (id, name, tier, currency, price, annual_price, billing_cycle, seats, enabled_modules, is_active, status)
-		 SELECT $1, name || ' (copy)', tier, currency, price, annual_price, billing_cycle, seats,
-		        enabled_modules, false, 'ACTIVE'
-		   FROM control_plane.plan_catalog WHERE id=$2`, newID, id)
+	err := inTx(ctx, s.pool, func(tx pgx.Tx) error {
+		var price, annual float64
+		var currency string
+		err := tx.QueryRow(ctx,
+			`INSERT INTO control_plane.plan_catalog
+			   (id, name, tier, currency, price, annual_price, billing_cycle, seats, enabled_modules, is_active, status)
+			 SELECT $1, name || ' (copy)', tier, currency, price, annual_price, billing_cycle, seats,
+			        enabled_modules, false, 'ACTIVE'
+			   FROM control_plane.plan_catalog WHERE id=$2
+			 RETURNING price, annual_price, currency`, newID, id).Scan(&price, &annual, &currency)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		return insertPlanVersionV1(ctx, tx, newID, price, annual, currency)
+	})
 	if err != nil {
 		return uuid.Nil, err
-	}
-	if ct.RowsAffected() == 0 {
-		return uuid.Nil, ErrNotFound
 	}
 	return newID, nil
 }
@@ -626,22 +642,24 @@ func (s *Service) ArchivePlan(ctx context.Context, id uuid.UUID) error {
 // ───────────────────────────── tenant operations ───────────────────────────
 
 type TenantRowDTO struct {
-	ID            uuid.UUID  `json:"id"`
-	Slug          string     `json:"slug"`
-	Name          string     `json:"name"`
-	Status        string     `json:"status"`
-	Plan          *string    `json:"plan,omitempty"`
-	SubStatus     *string    `json:"subscription_status,omitempty"`
-	LicenseStatus *string    `json:"license_status,omitempty"`
-	LicenseExpiry *time.Time `json:"license_expires_at,omitempty"`
-	Users         int        `json:"users"`
-	ProvisionedAt *time.Time `json:"provisioned_at,omitempty"`
+	ID             uuid.UUID  `json:"id"`
+	Slug           string     `json:"slug"`
+	Name           string     `json:"name"`
+	Status         string     `json:"status"`
+	Plan           *string    `json:"plan,omitempty"`
+	SubStatus      *string    `json:"subscription_status,omitempty"`
+	SubscriptionID *uuid.UUID `json:"subscription_id,omitempty"`
+	AutoPayEnabled bool       `json:"autopay_enabled"`
+	LicenseStatus  *string    `json:"license_status,omitempty"`
+	LicenseExpiry  *time.Time `json:"license_expires_at,omitempty"`
+	Users          int        `json:"users"`
+	ProvisionedAt  *time.Time `json:"provisioned_at,omitempty"`
 }
 
 func (s *Service) ListTenantsEnriched(ctx context.Context) ([]TenantRowDTO, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT t.id, t.slug, t.name, t.status,
-		       p.name, sub.status, lic.status, lic.expires_at,
+		       p.name, sub.status, sub.id, COALESCE(sub.autopay_enabled, false), lic.status, lic.expires_at,
 		       COALESCE(mc.cnt, 0)
 		  FROM control_plane.tenant t
 		  LEFT JOIN LATERAL (
@@ -666,8 +684,8 @@ func (s *Service) ListTenantsEnriched(ctx context.Context) ([]TenantRowDTO, erro
 	out := []TenantRowDTO{}
 	for rows.Next() {
 		var t TenantRowDTO
-		if err := rows.Scan(&t.ID, &t.Slug, &t.Name, &t.Status, &t.Plan, &t.SubStatus,
-			&t.LicenseStatus, &t.LicenseExpiry, &t.Users); err != nil {
+		if err := rows.Scan(&t.ID, &t.Slug, &t.Name, &t.Status, &t.Plan, &t.SubStatus, &t.SubscriptionID,
+			&t.AutoPayEnabled, &t.LicenseStatus, &t.LicenseExpiry, &t.Users); err != nil {
 			return nil, err
 		}
 		out = append(out, t)

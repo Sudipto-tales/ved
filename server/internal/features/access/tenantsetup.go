@@ -8,6 +8,7 @@ package access
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -257,6 +258,47 @@ func SeedTenantSetup(ctx context.Context, repo *Repo, tenantID uuid.UUID) error 
 			}
 		}
 		return nil
+	})
+}
+
+// ---- Super-admin access consent (M11 "Login As Tenant") ---------------------------
+
+// GetSuperadminAccess reads the tenant's impersonation-consent flag.
+func (s *Service) GetSuperadminAccess(ctx context.Context, tenantID uuid.UUID) (bool, error) {
+	var allowed bool
+	err := s.repo.withTenant(ctx, tenantID, func(tx pgx.Tx) error {
+		return tx.QueryRow(ctx,
+			`SELECT allow_superadmin_access FROM tenant_profile WHERE tenant_id=$1 AND deleted_at IS NULL`,
+			tenantID).Scan(&allowed)
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return allowed, err
+}
+
+// SetSuperadminAccess flips the consent flag the platform "Login As" checks, in one tx
+// with a single outbox + audit (golden rule). The flag is TENANT-owned — only a tenant
+// admin (tenant.settings) reaches this — and the outbox row lets the cloud learn the
+// current consent state via sync.
+func (s *Service) SetSuperadminAccess(ctx context.Context, tenantID, actor uuid.UUID, allowed bool) error {
+	hlc := nowHLC()
+	return s.repo.withTenant(ctx, tenantID, func(tx pgx.Tx) error {
+		var profileID uuid.UUID
+		err := tx.QueryRow(ctx,
+			`UPDATE tenant_profile
+			    SET allow_superadmin_access=$2, updated_at=now(), version=version+1, hlc=$3
+			  WHERE tenant_id=$1 AND deleted_at IS NULL
+			  RETURNING id`, tenantID, allowed, hlc).Scan(&profileID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		payload, _ := json.Marshal(map[string]any{"allow_superadmin_access": allowed})
+		return writeOutboxAudit(ctx, tx, tenantID, "tenant_profile", profileID,
+			"UPDATE", "tenant.superadmin_access.set", actor, payload, hlc, s.repo.nodeID)
 	})
 }
 

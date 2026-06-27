@@ -206,6 +206,8 @@ export interface TenantRow {
   status: string;
   plan?: string | null;
   subscription_status?: string | null;
+  subscription_id?: string | null;
+  autopay_enabled: boolean;
   license_status?: string | null;
   license_expires_at?: string | null;
   users: number;
@@ -340,6 +342,102 @@ export function useDeleteRelease() {
   return useMutation({
     mutationFn: (id: string) => api.del<void>(`/api/v1/platform/releases/${id}`),
     onSuccess: () => invalidateReleases(qc),
+  });
+}
+
+// ── M11: KYC / risk / source (registration review) ───────────────────────────
+export interface KYCSummary {
+  kyc: Record<string, number>;
+  risk: Record<string, number>;
+  source: Record<string, number>;
+}
+
+export function useKYCAnalytics() {
+  return useQuery({
+    queryKey: ['platform', 'registrations', 'kyc-analytics'],
+    queryFn: () => api.get<KYCSummary>('/api/v1/platform/registrations/kyc-analytics'),
+  });
+}
+
+export function useSetKYC() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status, notes }: { id: string; status: string; notes?: string }) =>
+      api.post<void>(`/api/v1/platform/registrations/${id}/kyc`, { status, notes }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['platform', 'registrations'] }),
+  });
+}
+
+// ── M11: Login As Tenant (impersonation) ──────────────────────────────────────
+export interface ImpersonationResult {
+  access_token: string;
+  slug: string;
+  user_id: string;
+  login: string;
+  expires_in_sec: number;
+}
+
+export function useLoginAs() {
+  return useMutation({
+    mutationFn: (tenantId: string) =>
+      api.post<ImpersonationResult>(`/api/v1/platform/tenants/${tenantId}/login-as`),
+  });
+}
+
+// ── M11: plan versioning / grandfathered pricing ──────────────────────────────
+export interface PlanVersion {
+  id: string;
+  plan_id: string;
+  version: number;
+  monthly_price: number;
+  annual_price: number;
+  currency: string;
+  effective_date: string;
+  status: string;
+  active_subscribers: number;
+  price_diff: number;
+  is_latest: boolean;
+}
+
+export function usePlanVersions(planId: string | null) {
+  return useQuery({
+    queryKey: ['platform', 'plans', planId, 'versions'],
+    queryFn: () => api.get<{ versions: PlanVersion[] }>(`/api/v1/platform/plans/${planId}/versions`),
+    enabled: !!planId,
+  });
+}
+
+export function useCreatePlanVersion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: { monthly_price: number; annual_price: number; currency: string } }) =>
+      api.post<PlanVersion>(`/api/v1/platform/plans/${id}/versions`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['platform', 'plans'] }),
+  });
+}
+
+// ── M11: AutoPay ──────────────────────────────────────────────────────────────
+export interface AutoPaySummary {
+  active_subscriptions: number;
+  enabled: number;
+  adoption_pct: number;
+  failed_pct: number;
+  renewal_success_pct: number;
+}
+
+export function useAutoPayAnalytics() {
+  return useQuery({
+    queryKey: ['platform', 'subscriptions', 'autopay-analytics'],
+    queryFn: () => api.get<AutoPaySummary>('/api/v1/platform/subscriptions/autopay-analytics'),
+  });
+}
+
+export function useSetAutoPay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
+      api.post<void>(`/api/v1/platform/subscriptions/${id}/autopay`, { enabled }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['platform'] }),
   });
 }
 

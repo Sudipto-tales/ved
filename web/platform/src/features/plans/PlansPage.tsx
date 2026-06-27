@@ -15,11 +15,14 @@ import {
 } from '@/shared/ui';
 import {
   useCreatePlan,
+  useCreatePlanVersion,
   usePlanAction,
+  usePlanVersions,
   usePlatformPlans,
   useUpdatePlan,
   type Plan,
   type PlanInput,
+  type PlanVersion,
 } from '../../shared/platformApi';
 
 const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
@@ -126,12 +129,90 @@ function PlanForm({ plan, onClose }: { plan?: Plan; onClose: () => void }) {
   );
 }
 
+// PlanVersionsPanel — grandfathered-pricing history for one plan (M11). Lists every price
+// version (effective date, monthly price, diff vs previous, how many subscribers are on it)
+// and lets the super-admin publish a NEW price version without touching existing subscribers.
+function PlanVersionsPanel({ plan, onClose }: { plan: Plan; onClose: () => void }) {
+  const { data, isLoading, error } = usePlanVersions(plan.id);
+  const create = useCreatePlanVersion();
+  const [monthly, setMonthly] = useState<number>(plan.price);
+  const [annual, setAnnual] = useState<number>(plan.annual_price);
+  const rows = data?.versions ?? [];
+
+  function publish() {
+    create.mutate(
+      { id: plan.id, body: { monthly_price: monthly, annual_price: annual, currency: plan.currency } },
+      { onSuccess: () => undefined },
+    );
+  }
+
+  return (
+    <Card className="mt-16" style={{ borderColor: 'var(--accent)' }}>
+      <div className="flex gap-8" style={{ alignItems: 'center', justifyContent: 'space-between' }}>
+        <h3 style={{ fontSize: 15 }}>{plan.name} — price versions</h3>
+        <Button variant="ghost" onClick={onClose}>Close</Button>
+      </div>
+      {error && <p style={{ color: 'var(--danger)', fontSize: 13, marginTop: 8 }}>{String(error)}</p>}
+      <div className="mt-16">
+        <DataTable<PlanVersion>
+          loading={isLoading}
+          rows={rows}
+          rowKey={(v) => v.id}
+          empty={<EmptyState icon={<Icon name="layers" />} title="No versions" desc="No price history recorded for this plan yet." />}
+          columns={[
+            { header: 'Version', cell: (v) => <span style={{ fontWeight: 600 }}>v{v.version}</span> },
+            { header: 'Effective', cell: (v) => new Date(v.effective_date).toLocaleDateString() },
+            { header: 'Monthly', align: 'right', cell: (v) => inr.format(v.monthly_price) },
+            {
+              header: 'Diff',
+              align: 'right',
+              cell: (v) => (
+                <span style={{ color: v.price_diff > 0 ? 'var(--danger)' : v.price_diff < 0 ? 'var(--success)' : undefined }}>
+                  {v.price_diff > 0 ? '+' : ''}{inr.format(v.price_diff)}
+                </span>
+              ),
+            },
+            { header: 'Subscribers', align: 'right', cell: (v) => v.active_subscribers },
+            {
+              header: '',
+              align: 'right',
+              cell: (v) => (v.is_latest ? <Badge tone="success">latest</Badge> : <Badge tone="neutral">{v.status}</Badge>),
+            },
+          ]}
+        />
+      </div>
+
+      <div className="mt-16">
+        <h4 style={{ fontSize: 14, marginBottom: 8 }}>New price version</h4>
+        <p className="subtle" style={{ fontSize: 12, marginBottom: 12 }}>
+          Existing subscribers stay on their current price; only new sign-ups get this one.
+        </p>
+        <div style={FORM_GRID}>
+          <Field label={`Monthly price (${plan.currency})`}>
+            <input className="input" type="number" value={monthly} onChange={(e) => setMonthly(Number(e.target.value))} />
+          </Field>
+          <Field label={`Annual price (${plan.currency})`}>
+            <input className="input" type="number" value={annual} onChange={(e) => setAnnual(Number(e.target.value))} />
+          </Field>
+        </div>
+        {create.error && <p style={{ color: 'var(--danger)', fontSize: 13, marginTop: 8 }}>{String(create.error)}</p>}
+        <div className="flex gap-8 mt-16">
+          <Button disabled={create.isPending} onClick={publish}>
+            {create.isPending ? 'Publishing…' : 'Publish new version'}
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 // PlansPanel — the plan catalog table + CRUD form, header-less so it can be embedded
 // (the Subscriptions page renders it; there is no longer a standalone Plans page).
 export function PlansPanel() {
   const { data, isLoading, error } = usePlatformPlans();
   const action = usePlanAction();
   const [form, setForm] = useState<{ plan?: Plan } | null>(null);
+  const [versionsFor, setVersionsFor] = useState<Plan | null>(null);
   const rows = data?.plans ?? [];
 
   function duplicate(p: Plan) {
@@ -150,6 +231,7 @@ export function PlansPanel() {
       {action.error && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{String(action.error)}</p>}
 
       {form && <PlanForm plan={form.plan} onClose={() => setForm(null)} />}
+      {versionsFor && <PlanVersionsPanel plan={versionsFor} onClose={() => setVersionsFor(null)} />}
 
       <SectionCard
         icon="layers"
@@ -182,6 +264,18 @@ export function PlansPanel() {
               align: 'right',
               cell: (p) => (
                 <span className="flex gap-8" style={{ justifyContent: 'flex-end' }}>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="Price version history"
+                    aria-label="Price version history"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setVersionsFor(p);
+                    }}
+                  >
+                    <Icon name="chart" />
+                  </button>
                   <button
                     type="button"
                     className="icon-btn"

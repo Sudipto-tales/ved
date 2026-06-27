@@ -42,6 +42,8 @@ tags:
     description: Auth — login/refresh (public) + me/memberships + reset-password (M1).
   - name: guardian
     description: Child-scoped portal over students/academics/finance (M7).
+  - name: search
+    description: Permission-scoped global search across tenant entities (navbar command palette).
 
 paths:
   /api/v1/students/onboard:
@@ -170,6 +172,9 @@ paths:
     $ref: './paths/guardian.yaml#/MyLeaveRequests'
   /api/v1/guardian/contact:
     $ref: './paths/guardian.yaml#/UpdateOwnContact'
+
+  /api/v1/search:
+    $ref: './paths/search.yaml#/GlobalSearch'
 
 components:
   securitySchemes:

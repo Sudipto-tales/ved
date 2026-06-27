@@ -24,6 +24,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/weloin/ved/internal/platform/auth"
+	"github.com/weloin/ved/internal/platform/credential"
 	"github.com/weloin/ved/internal/platform/crypto"
 	"github.com/weloin/ved/internal/platform/httpx"
 )
@@ -106,6 +107,57 @@ func (r *Repo) memberships(ctx context.Context, userID uuid.UUID) ([]auth.Member
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// activation resolves a LIVE magic-login token (by hash) to its tenant + user via the
+// controlled SECURITY DEFINER bypass — the same narrow cross-tenant read pattern login
+// uses (`users` has no tenant context on a public endpoint).
+func (r *Repo) activation(ctx context.Context, tokenHash string) (tokenID, tenantID, userID uuid.UUID, err error) {
+	err = r.pool.QueryRow(ctx,
+		`SELECT id, tenant_id, user_id FROM auth_activation($1)`, tokenHash).
+		Scan(&tokenID, &tenantID, &userID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return uuid.Nil, uuid.Nil, uuid.Nil, ErrInvalidCredentials
+	}
+	return tokenID, tenantID, userID, err
+}
+
+// consumeActivation marks the token consumed in ONE tenant tx with its outbox + audit
+// (the golden rule). A token can be consumed exactly once — a re-used link no-ops with
+// ErrInvalidCredentials, so the magic link is genuinely single-use.
+func (r *Repo) consumeActivation(ctx context.Context, tenantID, tokenID, userID uuid.UUID) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if _, err := tx.Exec(ctx, "SELECT set_config('app.tenant_id', $1, true)", tenantID.String()); err != nil {
+		return err
+	}
+	hlc := nowHLC()
+	ct, err := tx.Exec(ctx,
+		`UPDATE activation_token SET consumed_at=now(), updated_at=now(), version=version+1, hlc=$2
+		  WHERE id=$1 AND consumed_at IS NULL AND deleted_at IS NULL`, tokenID, hlc)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrInvalidCredentials
+	}
+	payload, _ := json.Marshal(map[string]any{"token_id": tokenID, "user_id": userID})
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO outbox (id, tenant_id, aggregate, aggregate_id, op, payload, hlc, origin_node_id)
+		 VALUES ($1,$2,'activation_token',$3,'CONSUME',$4,$5,$6)`,
+		uuid.Must(uuid.NewV7()), tenantID, tokenID, payload, hlc, r.nodeID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO audit_log (id, tenant_id, action, resource_type, resource_id, after, origin_node_id)
+		 VALUES ($1,$2,'activation.consume','activation_token',$3,$4,$5)`,
+		uuid.Must(uuid.NewV7()), tenantID, tokenID, payload, r.nodeID); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 // updatePassword sets a new hash and clears the must-reset flag (global users row).
@@ -198,6 +250,31 @@ func (s *Service) ResetPassword(ctx context.Context, userID uuid.UUID, current, 
 	return s.repo.updatePassword(ctx, userID, hash)
 }
 
+// Activate consumes a one-time magic-login token and logs the user in (M11). The token
+// replaces typing the temp credential: clicking the emailed link resolves + consumes the
+// token, then issues the normal token pair. The provisioned admin still carries
+// must_reset_password, so the FE routes them into setting a password.
+func (s *Service) Activate(ctx context.Context, rawToken string) (LoginResult, error) {
+	if rawToken == "" {
+		return LoginResult{}, ErrInvalidCredentials
+	}
+	tokenID, tenantID, userID, err := s.repo.activation(ctx, credential.HashToken(rawToken))
+	if err != nil {
+		return LoginResult{}, err
+	}
+	if err := s.repo.consumeActivation(ctx, tenantID, tokenID, userID); err != nil {
+		return LoginResult{}, err
+	}
+	u, err := s.repo.userByID(ctx, userID)
+	if err != nil {
+		return LoginResult{}, err
+	}
+	if u.Status != "ACTIVE" {
+		return LoginResult{}, ErrUserNotActive
+	}
+	return s.issue(ctx, u)
+}
+
 func (s *Service) issue(ctx context.Context, u user) (LoginResult, error) {
 	ms, err := s.repo.memberships(ctx, u.ID)
 	if err != nil {
@@ -241,6 +318,22 @@ func RegisterPublic(r chi.Router, svc *Service) {
 			return
 		}
 		res, err := svc.Login(req.Context(), in.LoginIdentifier, in.Password)
+		if err != nil {
+			writeAuthErr(w, err)
+			return
+		}
+		httpx.JSON(w, http.StatusOK, res)
+	})
+
+	r.Post("/auth/activate", func(w http.ResponseWriter, req *http.Request) {
+		var in struct {
+			Token string `json:"token"`
+		}
+		if err := json.NewDecoder(req.Body).Decode(&in); err != nil || in.Token == "" {
+			httpx.Error(w, http.StatusBadRequest, "token is required")
+			return
+		}
+		res, err := svc.Activate(req.Context(), in.Token)
 		if err != nil {
 			writeAuthErr(w, err)
 			return

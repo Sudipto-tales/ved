@@ -16,22 +16,46 @@ import type {
   ApproveResult as GenApproveResult,
 } from '../../shared/generated/model';
 
+// M11: the control plane now enriches registrations with KYC / risk / source. These fields
+// aren't in the frozen OpenAPI model yet, so we augment the generated types locally rather
+// than hand-edit the generated files (regen-safe). See platform_v2.go.
+export interface RegistrationKYC {
+  status: string;
+  business_reg?: string | null;
+  gst?: string | null;
+  notes?: string | null;
+  risk_score: number;
+  risk_factors: string[];
+  source: string;
+  source_detail?: string | null;
+}
+
 // Generated types, re-exported under the names this slice's pages already use.
-export type Registration = GenRegistration;
+export type Registration = GenRegistration & {
+  kyc_status?: string | null;
+  /** Coarse band: LOW | MEDIUM | HIGH. */
+  risk_score?: string | null;
+  source?: string | null;
+};
 export type PaymentProof = Proof;
-export type RegistrationDetail = GenRegistrationDetail;
-export type ApproveResult = GenApproveResult;
+export type RegistrationDetail = GenRegistrationDetail & { kyc?: RegistrationKYC | null };
+export type ApproveResult = GenApproveResult & { magic_token?: string | null };
 
 const KEY = ['platform', 'registrations'] as const;
 
 export function useRegistrations() {
-  return useQuery({ queryKey: KEY, queryFn: ({ signal }) => listRegistrations(signal) });
+  return useQuery({
+    queryKey: KEY,
+    // The control plane returns the M11-augmented rows (kyc_status / risk_score / source);
+    // the generated client type predates them, so re-type via the augmented alias.
+    queryFn: ({ signal }) => listRegistrations(signal) as Promise<{ registrations: Registration[] }>,
+  });
 }
 
 export function useRegistration(id: string) {
   return useQuery({
     queryKey: [...KEY, id],
-    queryFn: ({ signal }) => getRegistrationDetail(id, signal),
+    queryFn: ({ signal }) => getRegistrationDetail(id, signal) as Promise<RegistrationDetail>,
     enabled: !!id,
   });
 }
@@ -50,7 +74,8 @@ function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
 export function useApprove() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => approveRegistration(id),
+    // ApproveResult is augmented with the optional magic_token (one-click activation link).
+    mutationFn: (id: string) => approveRegistration(id) as Promise<ApproveResult>,
     onSuccess: () => invalidateAll(qc),
   });
 }

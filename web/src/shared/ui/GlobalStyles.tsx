@@ -196,6 +196,36 @@ code{font-family:var(--mono);font-size:.92em;}
 .menu-item.active{color:var(--text);}
 .menu-item svg{width:16px;height:16px;}
 
+/* topbar-search as a button (opens the command palette) — match the input look */
+button.topbar-search{cursor:pointer;text-align:left;font:inherit;}
+button.topbar-search:hover{border-color:var(--border-strong);color:var(--text);}
+.topbar-search .ts-placeholder{flex:1;min-width:0;color:var(--text-subtle);}
+
+/* Command palette (global search) — backdrop + centered panel, shadow only */
+.cmdk-backdrop{position:fixed;inset:0;z-index:100;display:flex;align-items:flex-start;justify-content:center;
+  padding:12vh 16px 16px;background:rgba(15,28,26,.34);backdrop-filter:blur(2px);}
+.cmdk-panel{width:600px;max-width:96vw;max-height:70vh;display:flex;flex-direction:column;overflow:hidden;
+  background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg, var(--shadow));}
+.cmdk-input-row{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border);
+  color:var(--text-subtle);}
+.cmdk-input{flex:1;min-width:0;border:none;background:transparent;outline:none;color:var(--text);font-size:15px;}
+.cmdk-results{overflow-y:auto;padding:6px;}
+.cmdk-empty{padding:28px 16px;text-align:center;color:var(--text-muted);font-size:13.5px;}
+.cmdk-group{padding:4px 0;}
+.cmdk-group-label{padding:6px 12px 4px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--text-subtle);}
+.cmdk-item{display:flex;align-items:center;gap:10px;width:100%;padding:9px 12px;border:0;border-radius:var(--radius-sm);
+  background:none;cursor:pointer;color:var(--text);font-size:14px;text-align:left;}
+.cmdk-item.active{background:var(--primary-weak);color:var(--primary-hover);}
+.cmdk-item-icon{width:18px;height:18px;flex-shrink:0;color:var(--text-subtle);}
+.cmdk-item.active .cmdk-item-icon{color:var(--primary-hover);}
+.cmdk-item-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;}
+.cmdk-item-sub{flex-shrink:0;color:var(--text-muted);font-size:12.5px;max-width:45%;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;}
+.cmdk-footer{display:flex;gap:18px;padding:10px 16px;border-top:1px solid var(--border);
+  color:var(--text-subtle);font-size:12px;}
+.cmdk-footer .kbd{margin-right:6px;}
+
 /* Hero banner — deep organic gradient, white type, optional CTA (Minimal welcome card) */
 .hero{position:relative;overflow:hidden;border-radius:var(--radius-lg);padding:40px;color:#fff;
   background:linear-gradient(135deg,#0c4a3e 0%,#103b46 60%,#0a2e3a 100%);}

@@ -45,6 +45,29 @@ UNIQUE (login_identifier)                 -- global uniqueness, not (tenant_id, 
 `password_hash`, `real_contact_email`, and `phone` are sensitive and candidates for
 app-layer envelope encryption ([21](../21-database-architecture.md)).
 
+### `activation_token` — magic login link (M11, tenant-scoped + RLS)
+
+The one-time "click to activate" token issued at provisioning so a new admin can sign in
+without typing the temp password ([24 §5](../24-login-and-registration.md)). Only the
+**SHA-256 hash** is stored; the raw value travels solely in the emailed link.
+
+```sql
+activation_token                          -- tenant-scoped + RLS + sync columns
+  id           UUID PRIMARY KEY
+  tenant_id    UUID NOT NULL
+  user_id      UUID NOT NULL              -- the user the link signs in
+  token_hash   TEXT NOT NULL UNIQUE       -- sha256(raw); raw is never persisted
+  expires_at   TIMESTAMPTZ NOT NULL       -- 72h at provisioning
+  consumed_at? TIMESTAMPTZ                -- set on use → single-use
+```
+
+- The node's **public** `POST /auth/activate` has no tenant context, so it resolves a live
+  token via a narrow `auth_activation(token_hash)` `SECURITY DEFINER` read — the same
+  controlled-bypass pattern as `auth_memberships` at login — then `SET app.tenant_id` and
+  consumes it (row + outbox + audit, golden rule). A re-clicked link 404s.
+- The signed-in admin still carries `must_reset_password`, so they are routed into setting a
+  real password; the temp password remains a fallback.
+
 ---
 
 ## Membership — user × tenant (tenant-scoped)

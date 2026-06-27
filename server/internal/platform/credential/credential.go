@@ -14,6 +14,9 @@ package credential
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"strings"
@@ -100,4 +103,23 @@ func TempPassword() (string, error) {
 		b[i] = pwAlphabet[idx.Int64()]
 	}
 	return string(b), nil
+}
+
+// ActivationToken returns a high-entropy URL-safe magic-login token (the raw value, for
+// the emailed link) together with its SHA-256 hash (the only thing persisted). 32 random
+// bytes → 43-char base64url string. See HashToken for verifying an incoming token.
+func ActivationToken() (raw, hash string, err error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", "", err
+	}
+	raw = base64.RawURLEncoding.EncodeToString(b)
+	return raw, HashToken(raw), nil
+}
+
+// HashToken returns the hex SHA-256 of a raw activation token — the persisted form, so a
+// leaked DB never yields a usable link.
+func HashToken(raw string) string {
+	sum := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(sum[:])
 }

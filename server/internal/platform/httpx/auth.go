@@ -21,6 +21,9 @@ type Identity struct {
 	UserID      uuid.UUID
 	Memberships []auth.Membership
 	MustReset   bool
+	// Impersonator is set (to the platform superadmin id) when this is a "Login As
+	// Tenant" support session (M11); empty for ordinary logins.
+	Impersonator string
 }
 
 const identityKey ctxKey = iota + 1 // tenantKey is 0
@@ -45,7 +48,7 @@ func Authenticator(m *auth.Manager) func(http.Handler) http.Handler {
 				Error(w, http.StatusUnauthorized, "invalid token subject")
 				return
 			}
-			id := Identity{UserID: uid, Memberships: claims.Memberships, MustReset: claims.MustReset}
+			id := Identity{UserID: uid, Memberships: claims.Memberships, MustReset: claims.MustReset, Impersonator: claims.Impersonator}
 			ctx := context.WithValue(r.Context(), identityKey, id)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
