@@ -646,6 +646,8 @@ type TenantRowDTO struct {
 	Slug           string     `json:"slug"`
 	Name           string     `json:"name"`
 	Status         string     `json:"status"`
+	AdminName      *string    `json:"admin_name,omitempty"`
+	AdminEmail     *string    `json:"admin_email,omitempty"`
 	Plan           *string    `json:"plan,omitempty"`
 	SubStatus      *string    `json:"subscription_status,omitempty"`
 	SubscriptionID *uuid.UUID `json:"subscription_id,omitempty"`
@@ -658,10 +660,14 @@ type TenantRowDTO struct {
 
 func (s *Service) ListTenantsEnriched(ctx context.Context) ([]TenantRowDTO, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT t.id, t.slug, t.name, t.status,
+		SELECT t.id, t.slug, t.name, t.status, reg.admin_name, reg.admin_email,
 		       p.name, sub.status, sub.id, COALESCE(sub.autopay_enabled, false), lic.status, lic.expires_at,
 		       COALESCE(mc.cnt, 0)
 		  FROM control_plane.tenant t
+		  LEFT JOIN LATERAL (
+		      SELECT admin_name, admin_email FROM control_plane.school_registration r
+		       WHERE r.tenant_id = t.id ORDER BY r.created_at DESC LIMIT 1
+		  ) reg ON true
 		  LEFT JOIN LATERAL (
 		      SELECT * FROM control_plane.subscription s
 		       WHERE s.tenant_id = t.id ORDER BY s.created_at DESC LIMIT 1
@@ -684,7 +690,7 @@ func (s *Service) ListTenantsEnriched(ctx context.Context) ([]TenantRowDTO, erro
 	out := []TenantRowDTO{}
 	for rows.Next() {
 		var t TenantRowDTO
-		if err := rows.Scan(&t.ID, &t.Slug, &t.Name, &t.Status, &t.Plan, &t.SubStatus, &t.SubscriptionID,
+		if err := rows.Scan(&t.ID, &t.Slug, &t.Name, &t.Status, &t.AdminName, &t.AdminEmail, &t.Plan, &t.SubStatus, &t.SubscriptionID,
 			&t.AutoPayEnabled, &t.LicenseStatus, &t.LicenseExpiry, &t.Users); err != nil {
 			return nil, err
 		}

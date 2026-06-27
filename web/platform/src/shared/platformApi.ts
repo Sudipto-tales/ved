@@ -237,6 +237,8 @@ export interface TenantRow {
   slug: string;
   name: string;
   status: string;
+  admin_name?: string | null;
+  admin_email?: string | null;
   plan?: string | null;
   subscription_status?: string | null;
   subscription_id?: string | null;
