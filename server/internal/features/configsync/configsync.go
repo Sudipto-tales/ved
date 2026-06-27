@@ -23,8 +23,14 @@ const durable = "node-config"
 // Each payload is a FULL-ROW snapshot (the cloud relay sends complete columns), merged by
 // row-level LWW. tenant_profile is the first real cloud→node config target (a school's
 // display settings pushed from the control plane).
+//
+// support_*: the platform's reply to a support ticket flows back to the school's node here
+// — a new PLATFORM support_message row, plus the ticket's status (open→pending/resolved)
+// and last_message_at so the school's queue reflects the reply.
 var DefaultRegistry = syncpkg.Registry{
-	"tenant_profile": {Table: "tenant_profile", Columns: []string{"display_name", "slug"}},
+	"tenant_profile":  {Table: "tenant_profile", Columns: []string{"display_name", "slug"}},
+	"support_message": {Table: "support_message", Columns: []string{"ticket_id", "author_type", "author_name", "body", "created_at"}},
+	"support_ticket":  {Table: "support_ticket", Columns: []string{"subject", "priority", "status", "last_message_at"}},
 }
 
 // Start ensures the config stream and subscribes the durable node-config consumer. Returns

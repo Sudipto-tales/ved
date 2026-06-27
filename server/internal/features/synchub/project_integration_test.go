@@ -29,7 +29,7 @@ func TestProjectSupport(t *testing.T) {
 	tenantID := uuid.Must(uuid.NewV7())
 	_, err := pool.Exec(ctx,
 		`INSERT INTO control_plane.tenant (id, slug, name, status) VALUES ($1,$2,$3,'ACTIVE')`,
-		tenantID, "proj-"+tenantID.String()[:8], "Projected School")
+		tenantID, "proj-"+tenantID.String(), "Projected School")
 	require.NoError(t, err)
 
 	ticketID := uuid.Must(uuid.NewV7())

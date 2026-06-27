@@ -165,6 +165,7 @@ func (s *Service) ReplyToTicket(ctx context.Context, ticketID uuid.UUID, authorN
 	if body == "" {
 		return SupportThread{}, fmt.Errorf("%w: message body required", ErrInvalidInput)
 	}
+	msgID := uuid.Must(uuid.NewV7())
 	err := inTx(ctx, s.pool, func(tx pgx.Tx) error {
 		ct, err := tx.Exec(ctx,
 			`UPDATE control_plane.support_ticket
@@ -177,11 +178,17 @@ func (s *Service) ReplyToTicket(ctx context.Context, ticketID uuid.UUID, authorN
 		if ct.RowsAffected() == 0 {
 			return ErrNotFound
 		}
-		_, err = tx.Exec(ctx,
+		if _, err = tx.Exec(ctx,
 			`INSERT INTO control_plane.support_message (id, ticket_id, author_type, author_name, body)
 			 VALUES ($1, $2, 'PLATFORM', $3, $4)`,
-			uuid.Must(uuid.NewV7()), ticketID, authorName, body)
-		return err
+			msgID, ticketID, authorName, body); err != nil {
+			return err
+		}
+		// Push the reply (and the new ticket state) back to the school's node.
+		if err := s.pushSupportMessage(ctx, tx, ticketID, msgID, authorName, body); err != nil {
+			return err
+		}
+		return s.pushSupportTicket(ctx, tx, ticketID)
 	})
 	if err != nil {
 		return SupportThread{}, err
@@ -189,21 +196,81 @@ func (s *Service) ReplyToTicket(ctx context.Context, ticketID uuid.UUID, authorN
 	return s.GetSupportThread(ctx, ticketID)
 }
 
-// SetTicketStatus moves a ticket through open / pending / resolved.
+// SetTicketStatus moves a ticket through open / pending / resolved, and pushes the new
+// status back to the school's node.
 func (s *Service) SetTicketStatus(ctx context.Context, ticketID uuid.UUID, status string) error {
 	if status != "open" && status != "pending" && status != "resolved" {
 		return fmt.Errorf("%w: invalid status", ErrInvalidInput)
 	}
-	ct, err := s.pool.Exec(ctx,
-		`UPDATE control_plane.support_ticket SET status = $2, updated_at = now() WHERE id = $1`,
-		ticketID, status)
-	if err != nil {
+	return inTx(ctx, s.pool, func(tx pgx.Tx) error {
+		ct, err := tx.Exec(ctx,
+			`UPDATE control_plane.support_ticket SET status = $2, updated_at = now() WHERE id = $1`,
+			ticketID, status)
+		if err != nil {
+			return err
+		}
+		if ct.RowsAffected() == 0 {
+			return ErrNotFound
+		}
+		return s.pushSupportTicket(ctx, tx, ticketID)
+	})
+}
+
+// pushSupportMessage queues a cloud→node cp_outbox event for a PLATFORM reply, so it
+// appears in the school's local thread. No-op when the ticket has no tenant (a ticket the
+// superadmin logged on a school's behalf has nowhere to sync to yet).
+func (s *Service) pushSupportMessage(ctx context.Context, tx pgx.Tx, ticketID, msgID uuid.UUID, authorName, body string) error {
+	var tenantID *uuid.UUID
+	if err := tx.QueryRow(ctx, `SELECT tenant_id FROM control_plane.support_ticket WHERE id=$1`, ticketID).Scan(&tenantID); err != nil {
 		return err
 	}
-	if ct.RowsAffected() == 0 {
-		return ErrNotFound
+	if tenantID == nil {
+		return nil
 	}
-	return nil
+	payload, _ := json.Marshal(map[string]any{
+		"ticket_id":   ticketID,
+		"author_type": "PLATFORM",
+		"author_name": authorName,
+		"body":        body,
+		"created_at":  time.Now().UTC().Format(time.RFC3339Nano),
+	})
+	_, err := tx.Exec(ctx,
+		`INSERT INTO control_plane.cp_outbox (id, tenant_id, aggregate, aggregate_id, op, payload, hlc, origin_node_id)
+		 VALUES ($1,$2,'support_message',$3,'CREATE',$4,$5,$6)`,
+		uuid.Must(uuid.NewV7()), *tenantID, msgID, payload, cpHLC(), s.nodeID)
+	return err
+}
+
+// pushSupportTicket queues a cloud→node cp_outbox snapshot of the ticket's current state
+// (status / priority / subject / last activity) so the school's queue reflects it.
+func (s *Service) pushSupportTicket(ctx context.Context, tx pgx.Tx, ticketID uuid.UUID) error {
+	var (
+		tenantID      *uuid.UUID
+		subject       string
+		priority      string
+		status        string
+		lastMessageAt time.Time
+	)
+	if err := tx.QueryRow(ctx,
+		`SELECT tenant_id, subject, priority, status, last_message_at
+		   FROM control_plane.support_ticket WHERE id=$1`, ticketID).
+		Scan(&tenantID, &subject, &priority, &status, &lastMessageAt); err != nil {
+		return err
+	}
+	if tenantID == nil {
+		return nil
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"subject":         subject,
+		"priority":        priority,
+		"status":          status,
+		"last_message_at": lastMessageAt.UTC().Format(time.RFC3339Nano),
+	})
+	_, err := tx.Exec(ctx,
+		`INSERT INTO control_plane.cp_outbox (id, tenant_id, aggregate, aggregate_id, op, payload, hlc, origin_node_id)
+		 VALUES ($1,$2,'support_ticket',$3,'UPDATE',$4,$5,$6)`,
+		uuid.Must(uuid.NewV7()), *tenantID, ticketID, payload, cpHLC(), s.nodeID)
+	return err
 }
 
 // SupportAnalytics powers the console's stat cards.
