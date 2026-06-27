@@ -79,9 +79,6 @@ export default function TenantDetailPage() {
             <Button variant="secondary" onClick={() => window.open(tenantUrl(tenant.slug), '_blank')}>
               Visit site
             </Button>
-            <Button variant="secondary" onClick={() => window.open(tenantUrl(tenant.slug, true), '_blank')}>
-              Open admin
-            </Button>
             <Button variant="secondary" onClick={() => navigate('/licenses')}>
               Manage License
             </Button>

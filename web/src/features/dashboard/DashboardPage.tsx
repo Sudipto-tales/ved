@@ -4,6 +4,7 @@
 // illustrative until a metrics endpoint exists.
 import { Link } from 'react-router-dom';
 import { Badge, Button, Card, HeroBanner, PageHeader, StatCard } from '@/shared/ui';
+import { useActiveMembership } from '@/shared/auth/AuthProvider';
 import { Can } from '@/shared/authz/Can';
 import { useStudents } from '@/features/students/api/studentsApi';
 import { useTeachers } from '@/features/teachers/api/teachersApi';
@@ -14,6 +15,7 @@ export default function DashboardPage() {
   const students = useStudents();
   const teachers = useTeachers();
   const staff = useStaff();
+  const schoolName = useActiveMembership()?.tenant_name;
   const n = (q: { data?: { [k: string]: unknown[] } }, key: string) =>
     (q.data?.[key]?.length ?? 0).toLocaleString();
 
@@ -24,7 +26,7 @@ export default function DashboardPage() {
       {/* Hero + featured (the graphic focal points) */}
       <div style={{ display: 'grid', gridTemplateColumns: '1.9fr 1fr', gap: 24, alignItems: 'stretch' }}>
         <HeroBanner
-          title={<>Welcome back 👋</>}
+          title={<>{schoolName ? `Welcome to ${schoolName} 👋` : 'Welcome back 👋'}</>}
           subtitle="Everything your school runs on — people, academics, fees and learning — in one place. Start by adding a student or reviewing today's roster."
           action={
             <Can permission="student.onboard">

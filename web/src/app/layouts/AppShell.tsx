@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { protectedPages } from '@/app/pages';
 import type { Persona } from '@/shared/types/page';
-import { useAuth } from '@/shared/auth/AuthProvider';
+import { useAuth, useActiveMembership } from '@/shared/auth/AuthProvider';
 import { useSyncPermissions } from '@/shared/auth/useSyncPermissions';
 import { useTenant } from '@/shared/tenant/TenantProvider';
 import { Can } from '@/shared/authz/Can';
@@ -100,18 +100,32 @@ const PERSONAS_FOR: Record<string, Persona[]> = {
 };
 
 export function AppShell() {
-  const { logout, memberships } = useAuth();
-  const { activeTenantId, clearTenant } = useTenant();
+  const { logout, loginHandle, hasPermission } = useAuth();
+  const { clearTenant } = useTenant();
+  const activeMembership = useActiveMembership();
   useSyncPermissions(); // load effective permissions for the active tenant (M2)
   const loc = useLocation();
   const navPages = protectedPages.filter((p) => p.nav);
 
   const [searchOpen, setSearchOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   useCommandHotkey(() => setSearchOpen(true));
 
-  const userType = memberships.find((m) => m.tenant_id === activeTenantId)?.user_type ?? 'EMPLOYEE';
+  const userType = activeMembership?.user_type ?? 'EMPLOYEE';
   const allowed = PERSONAS_FOR[userType] ?? ['ADMIN', 'STAFF'];
   const personasToShow = PERSONA_ORDER.filter((p) => allowed.includes(p));
+
+  // The school name + slug drive the brand and the welcome; fall back gracefully for
+  // older sessions that predate the login-payload carrying them (docs/24, docs/25).
+  const schoolName = activeMembership?.tenant_name || 'VED';
+  const schoolSlug = activeMembership?.slug;
+  const roleLabel = hasPermission('tenant.admin')
+    ? 'Admin'
+    : userType.charAt(0) + userType.slice(1).toLowerCase();
+  const signOut = () => {
+    clearTenant();
+    logout();
+  };
 
   return (
     <div className="shell">
@@ -120,11 +134,13 @@ export function AppShell() {
           <span className="brand-badge">
             <Icon name="layers" size={16} />
           </span>
-          VED
+          <span className="brand-name" title={schoolName}>{schoolName}</span>
         </Link>
-        <div className="subtle" style={{ fontSize: 11, padding: '2px 8px 0' }}>
-          tenant {activeTenantId?.slice(0, 8)}…
-        </div>
+        {schoolSlug && (
+          <div className="subtle" style={{ fontSize: 11, padding: '2px 8px 0' }}>
+            {schoolSlug}
+          </div>
+        )}
 
         {userType === 'EMPLOYEE' ? (
           // Admin/staff: one functional, journey-ordered taxonomy (docs/26) instead of a
@@ -182,13 +198,7 @@ export function AppShell() {
           <Icon name="help" className="nav-icon" />
           Help &amp; guidance
         </Link>
-        <button
-          className="nav-item"
-          onClick={() => {
-            clearTenant();
-            logout();
-          }}
-        >
+        <button className="nav-item" onClick={signOut}>
           Sign out
         </button>
       </aside>
@@ -206,6 +216,37 @@ export function AppShell() {
             <span className="kbd">⌘K</span>
           </button>
           <div className="spacer" />
+          <div className="account" onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setAccountOpen(false); }}>
+            <button
+              type="button"
+              className="account-chip"
+              aria-haspopup="menu"
+              aria-expanded={accountOpen}
+              onClick={() => setAccountOpen((v) => !v)}
+            >
+              <span className="account-avatar" aria-hidden>
+                <Icon name="user" size={15} />
+              </span>
+              <span className="account-meta">
+                <span className="account-name">{loginHandle ?? 'Account'}</span>
+                <span className="account-role">{roleLabel}</span>
+              </span>
+              <Icon name="chevron-down" size={14} />
+            </button>
+            {accountOpen && (
+              <div className="menu" role="menu">
+                <div className="menu-head">
+                  <b>{loginHandle ?? 'Signed in'}</b>
+                  <span>{schoolName} · {roleLabel}</span>
+                </div>
+                <div className="menu-sep" />
+                <button type="button" role="menuitem" className="menu-item" onClick={signOut}>
+                  <Icon name="log-out" size={16} />
+                  Sign out
+                </button>
+              </div>
+            )}
+          </div>
         </header>
 
         <main className="main">

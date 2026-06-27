@@ -16,6 +16,7 @@ interface ActivateResult {
   access_token: string;
   refresh_token?: string;
   must_reset_password?: boolean;
+  login?: string;
   memberships?: Membership[];
 }
 
@@ -56,6 +57,7 @@ export default function ActivatePage() {
         accessToken: res.access_token,
         refreshToken: res.refresh_token ?? '',
         mustReset,
+        login: res.login,
         memberships,
       });
       continueAfterAuth(memberships, mustReset);

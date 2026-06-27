@@ -32,7 +32,10 @@ export type IconName =
   | 'x'
   | 'eye'
   | 'download'
-  | 'shield-off';
+  | 'shield-off'
+  | 'user'
+  | 'chevron-down'
+  | 'log-out';
 
 const paths: Record<IconName, ReactNode> = {
   grid: (
@@ -61,6 +64,19 @@ const paths: Record<IconName, ReactNode> = {
       <circle cx="9" cy="8" r="3" />
       <path d="M3 20a6 6 0 0 1 11-3.3" />
       <path d="M18 9v6M15 12h6" />
+    </>
+  ),
+  user: (
+    <>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5 20a7 7 0 0 1 14 0" />
+    </>
+  ),
+  'chevron-down': <path d="M6 9l6 6 6-6" />,
+  'log-out': (
+    <>
+      <path d="M15 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h9" />
+      <path d="M14 12H21m0 0-3-3m3 3-3 3" />
     </>
   ),
   graduation: (

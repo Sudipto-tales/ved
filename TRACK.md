@@ -5,7 +5,35 @@ The single place that records **how far the build has progressed** against the p
 
 **Legend:** ✅ done · 🟡 scaffolded / partial · ⬜ not started
 
-> **YOU ARE HERE:** **Guided school-setup journey + tenant sidebar redesign (frontend) —
+> **YOU ARE HERE:** **Post-login identity in the tenant shell — school name + welcome +
+> account chip (backend + frontend), live-verified.** Two fixes shipped together. (1)
+> **Removed the dead `{slug}-admin` subdomain structure** — the tenant admin uses the SAME
+> `{slug}.ved.test` door as every other role (the login identifier, not the address, picks
+> the experience; docs/24, docs/25). Dropped the `admin` arg from `platformApi.tenantUrl`,
+> deleted the redundant "Open admin" button on the platform Tenant detail page, and fixed
+> the misleading nginx comments. (2) **The shell now shows which school you're in and who
+> you are.** Previously the sidebar was a hardcoded "VED" + a truncated tenant UUID, the
+> dashboard said a generic "Welcome back", and the topbar had no profile. Sourced from the
+> **login payload** (so EVERY persona gets it with no extra, admin-gated call): new
+> migration **`00017_membership_tenant_name`** widens the `auth_memberships(uuid)` SECURITY
+> DEFINER fn to also return `tenant_name`+`tenant_slug` via a LEFT JOIN on `tenant_profile`;
+> identity's `MembershipDTO` gains `tenant_name`/`slug`, `LoginResult` gains the user's
+> `login` handle, and `/me/memberships` re-resolves from the DB so a refresh carries the
+> same fields. OpenAPI spec updated + TS client regenerated (the fence). FE: `AuthProvider`
+> carries the handle + a new `useActiveMembership()` helper; the **sidebar brand** shows the
+> school name + slug, the **dashboard hero** reads "Welcome to {School} 👋", and a **topbar
+> account chip** (avatar + handle + role label + sign-out menu, reusing the `.menu` pattern)
+> fills the empty topbar. Added `user`/`chevron-down`/`log-out` thin-line icons.
+> **Verified:** `go build`/`vet`/`gofmt` clean (identity); both web apps `tsc -b` + `vite
+> build` + `build:platform` clean (EXIT 0); identity integration test extended + green;
+> **live HTTP smoke on the rebuilt node** — `POST /auth/login` (admin@ved.local) returns
+> `login`="admin@ved.local", `memberships[0].tenant_name`="VED Demo School", `slug`="ved";
+> `/me/memberships` carries the same; migration #17 applied. _Carried-forward: impersonation
+> / magic-link logins have no typed handle so the chip falls back to the role label only;
+> a teacher/student live login wasn't re-smoked but the DB fn returns the name for every
+> persona._
+>
+> **(prev) Guided school-setup journey + tenant sidebar redesign (frontend) —
 > complete, typechecks + builds clean.** New **`docs/26-school-setup-journey.md`** specs the
 > dependency-ordered setup chain (academic year → programs → sections/subjects → teachers →
 > teaching assignments → students → fees) with the rule "you can't reference a thing that

@@ -201,6 +201,20 @@ button.topbar-search{cursor:pointer;text-align:left;font:inherit;}
 button.topbar-search:hover{border-color:var(--border-strong);color:var(--text);}
 .topbar-search .ts-placeholder{flex:1;min-width:0;color:var(--text-subtle);}
 
+/* Topbar account chip + its dropdown (reuses the .menu pattern above) */
+.account{position:relative;}
+.account-chip{display:flex;align-items:center;gap:8px;height:40px;padding:0 8px 0 6px;font:inherit;
+  border:1px solid var(--border);background:var(--surface);border-radius:var(--radius-pill);cursor:pointer;
+  color:var(--text-muted);transition:background .12s,border-color .12s,color .12s;}
+.account-chip:hover{background:var(--surface-2);border-color:var(--border-strong);color:var(--text);}
+.account-avatar{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;
+  color:#fff;background:linear-gradient(135deg,var(--primary),var(--info));}
+.account-meta{display:flex;flex-direction:column;line-height:1.15;min-width:0;max-width:180px;text-align:left;}
+.account-name{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.account-role{font-size:11px;font-weight:600;color:var(--text-subtle);}
+.brand-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;}
+@media (max-width:640px){.account-meta{display:none;}}
+
 /* Command palette (global search) — backdrop + centered panel, shadow only */
 .cmdk-backdrop{position:fixed;inset:0;z-index:100;display:flex;align-items:flex-start;justify-content:center;
   padding:12vh 16px 16px;background:rgba(15,28,26,.34);backdrop-filter:blur(2px);}

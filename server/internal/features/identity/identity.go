@@ -33,16 +33,29 @@ import (
 
 type user struct {
 	ID           uuid.UUID
+	Login        string
 	PasswordHash string
 	MustReset    bool
 	Status       string
 }
 
-// MembershipDTO is the wire shape for a membership (login + /me/memberships).
+// MembershipDTO is the wire shape for a membership (login + /me/memberships). TenantName +
+// Slug let the tenant app greet every persona with their school's name (sidebar, "Welcome
+// to {School}") without an extra, admin-gated profile call — docs/24, docs/25.
 type MembershipDTO struct {
 	MembershipID uuid.UUID `json:"membership_id"`
 	TenantID     uuid.UUID `json:"tenant_id"`
 	UserType     string    `json:"user_type"`
+	TenantName   string    `json:"tenant_name"`
+	Slug         string    `json:"slug"`
+}
+
+// membership pairs the JWT-facing identity (auth.Membership) with the display fields the
+// FE shows. The names ride the login JSON only — JWT claims stay lean.
+type membership struct {
+	auth.Membership
+	TenantName string
+	Slug       string
 }
 
 var (
@@ -66,10 +79,10 @@ func NewRepo(pool *pgxpool.Pool, nodeID uuid.UUID) *Repo { return &Repo{pool: po
 func (r *Repo) userByLogin(ctx context.Context, login string) (user, error) {
 	var u user
 	err := r.pool.QueryRow(ctx,
-		`SELECT id, password_hash, must_reset_password, status
+		`SELECT id, login_identifier, password_hash, must_reset_password, status
 		   FROM users
 		  WHERE lower(login_identifier) = lower($1) AND deleted_at IS NULL`,
-		login).Scan(&u.ID, &u.PasswordHash, &u.MustReset, &u.Status)
+		login).Scan(&u.ID, &u.Login, &u.PasswordHash, &u.MustReset, &u.Status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return user{}, ErrInvalidCredentials
 	}
@@ -79,9 +92,9 @@ func (r *Repo) userByLogin(ctx context.Context, login string) (user, error) {
 func (r *Repo) userByID(ctx context.Context, id uuid.UUID) (user, error) {
 	var u user
 	err := r.pool.QueryRow(ctx,
-		`SELECT id, password_hash, must_reset_password, status
+		`SELECT id, login_identifier, password_hash, must_reset_password, status
 		   FROM users WHERE id = $1 AND deleted_at IS NULL`, id).
-		Scan(&u.ID, &u.PasswordHash, &u.MustReset, &u.Status)
+		Scan(&u.ID, &u.Login, &u.PasswordHash, &u.MustReset, &u.Status)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return user{}, ErrInvalidCredentials
 	}
@@ -90,18 +103,18 @@ func (r *Repo) userByID(ctx context.Context, id uuid.UUID) (user, error) {
 
 // memberships resolves a user's live ACTIVE memberships across every tenant, via the
 // controlled SECURITY DEFINER seam (the one place RLS is bypassed, for login only).
-func (r *Repo) memberships(ctx context.Context, userID uuid.UUID) ([]auth.Membership, error) {
+func (r *Repo) memberships(ctx context.Context, userID uuid.UUID) ([]membership, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT id, tenant_id, user_type, status FROM auth_memberships($1)`, userID)
+		`SELECT id, tenant_id, user_type, status, tenant_name, tenant_slug FROM auth_memberships($1)`, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := []auth.Membership{}
+	out := []membership{}
 	for rows.Next() {
-		var m auth.Membership
+		var m membership
 		var status string
-		if err := rows.Scan(&m.MembershipID, &m.TenantID, &m.UserType, &status); err != nil {
+		if err := rows.Scan(&m.MembershipID, &m.TenantID, &m.UserType, &status, &m.TenantName, &m.Slug); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
@@ -191,6 +204,7 @@ type LoginResult struct {
 	AccessToken  string          `json:"access_token"`
 	RefreshToken string          `json:"refresh_token"`
 	MustReset    bool            `json:"must_reset_password"`
+	Login        string          `json:"login"` // the signed-in user's handle (account chip)
 	Memberships  []MembershipDTO `json:"memberships"`
 }
 
@@ -275,12 +289,26 @@ func (s *Service) Activate(ctx context.Context, rawToken string) (LoginResult, e
 	return s.issue(ctx, u)
 }
 
+// Memberships re-resolves a user's live memberships (with their school name + slug) from
+// the DB — used by /me/memberships so a refresh carries the same display fields as login.
+func (s *Service) Memberships(ctx context.Context, userID uuid.UUID) ([]MembershipDTO, error) {
+	ms, err := s.repo.memberships(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return toDTOs(ms), nil
+}
+
 func (s *Service) issue(ctx context.Context, u user) (LoginResult, error) {
 	ms, err := s.repo.memberships(ctx, u.ID)
 	if err != nil {
 		return LoginResult{}, err
 	}
-	access, err := s.jwt.IssueAccess(u.ID, ms, u.MustReset)
+	authMs := make([]auth.Membership, len(ms))
+	for i, m := range ms {
+		authMs[i] = m.Membership
+	}
+	access, err := s.jwt.IssueAccess(u.ID, authMs, u.MustReset)
 	if err != nil {
 		return LoginResult{}, err
 	}
@@ -292,14 +320,18 @@ func (s *Service) issue(ctx context.Context, u user) (LoginResult, error) {
 		AccessToken:  access,
 		RefreshToken: refresh,
 		MustReset:    u.MustReset,
+		Login:        u.Login,
 		Memberships:  toDTOs(ms),
 	}, nil
 }
 
-func toDTOs(ms []auth.Membership) []MembershipDTO {
+func toDTOs(ms []membership) []MembershipDTO {
 	out := make([]MembershipDTO, 0, len(ms))
 	for _, m := range ms {
-		out = append(out, MembershipDTO{MembershipID: m.MembershipID, TenantID: m.TenantID, UserType: m.UserType})
+		out = append(out, MembershipDTO{
+			MembershipID: m.MembershipID, TenantID: m.TenantID, UserType: m.UserType,
+			TenantName: m.TenantName, Slug: m.Slug,
+		})
 	}
 	return out
 }
@@ -367,10 +399,15 @@ func RegisterMe(r chi.Router, svc *Service) {
 			httpx.Error(w, http.StatusUnauthorized, "unauthenticated")
 			return
 		}
+		ms, err := svc.Memberships(req.Context(), ident.UserID)
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, "could not resolve memberships")
+			return
+		}
 		httpx.JSON(w, http.StatusOK, map[string]any{
 			"user_id":             ident.UserID,
 			"must_reset_password": ident.MustReset,
-			"memberships":         toDTOs(ident.Memberships),
+			"memberships":         ms,
 		})
 	})
 

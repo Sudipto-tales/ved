@@ -477,14 +477,15 @@ export function useSetAutoPay() {
 }
 
 // tenantUrl — the public URL of a tenant's site from its slug, derived from the apex of the
-// current host (platform.ved.test → <slug>.ved.test). `admin: true` → the admin persona host.
-export function tenantUrl(slug: string, admin = false): string {
+// current host (platform.ved.test → <slug>.ved.test). There is ONE door per school: admin,
+// staff, teacher, student and guardian all sign in at <slug>.ved.test — the role (not the
+// address) decides the experience, so there is no separate "-admin" host (docs/24, docs/25).
+export function tenantUrl(slug: string): string {
   const host = typeof location !== 'undefined' ? location.hostname : 'platform.ved.test';
   const proto = typeof location !== 'undefined' ? location.protocol : 'http:';
   const parts = host.split('.');
   const base = parts.length > 1 ? parts.slice(1).join('.') : host; // drop the first label (platform/api/…)
-  const sub = admin ? `${slug}-admin` : slug;
-  return `${proto}//${sub}.${base}`;
+  return `${proto}//${slug}.${base}`;
 }
 
 // ── support tickets ──────────────────────────────────────────────────────────
