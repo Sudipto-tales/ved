@@ -5,7 +5,25 @@ The single place that records **how far the build has progressed** against the p
 
 **Legend:** ✅ done · 🟡 scaffolded / partial · ⬜ not started
 
-> **YOU ARE HERE:** **Dynamic School-Registration Form (control plane) — backend + frontend
+> **YOU ARE HERE:** **Guided school-setup journey + tenant sidebar redesign (frontend) —
+> complete, typechecks + builds clean.** New **`docs/26-school-setup-journey.md`** specs the
+> dependency-ordered setup chain (academic year → programs → sections/subjects → teachers →
+> teaching assignments → students → fees) with the rule "you can't reference a thing that
+> doesn't exist yet" (the worked example: create a teacher before assigning classes). FE: a
+> single-source **`useSetupProgress`** hook derives each step's done/blocked status from the
+> existing per-tenant list endpoints; a **`SetupChecklist`** on the admin dashboard (gated
+> `tenant.settings`, hides when complete) shows ordered steps with progress %, NEXT/locked
+> states and CTAs; a **`SetupGate`** soft-warning banner on the dependent pages (Teaching
+> assignments → needs teachers/sections/subjects; Sections → programs; Enrollment → sections)
+> names the missing prerequisite and links to it without hard-blocking. The **tenant sidebar**
+> is regrouped from one flat "ADMIN" list into functional, journey-ordered sections (Setup ·
+> People · Academics · Finance · Communication · Access & Roles · Reports · Support) derived
+> from each page's path in `AppShell`; the teacher/student/guardian portals keep their focused
+> single-group nav. **Verified:** tenant `tsc -b` + `vite build` clean (1056 modules); platform
+> unaffected. _Not yet browser-smoked. Carried-forward: finance SetupGate (Invoices/Collection
+> needs a fee-structure presence check beyond the fee-heads count)._
+>
+> **(prev) Dynamic School-Registration Form (control plane) — backend + frontend
 > complete & live-verified.** The platform superadmin can now curate the public `/signup`
 > form without a code change — the control-plane sibling of M10's dynamic onboarding template
 > (docs/06, docs/24). New cp migration **`cpmigrations/00011_registration_form`** adds a SINGLE

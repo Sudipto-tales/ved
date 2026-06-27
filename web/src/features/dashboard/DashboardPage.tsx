@@ -8,6 +8,7 @@ import { Can } from '@/shared/authz/Can';
 import { useStudents } from '@/features/students/api/studentsApi';
 import { useTeachers } from '@/features/teachers/api/teachersApi';
 import { useStaff } from '@/features/staff/api/staffApi';
+import { SetupChecklist } from './setup/SetupChecklist';
 
 export default function DashboardPage() {
   const students = useStudents();
@@ -37,6 +38,11 @@ export default function DashboardPage() {
           <p>A clean, flat utility with soft elevation and vivid status accents — applied across every screen.</p>
         </div>
       </div>
+
+      {/* Guided setup — only for admins, and only until setup is complete */}
+      <Can permission="tenant.settings">
+        <SetupChecklist />
+      </Can>
 
       {/* Key metrics */}
       <div className="grid-stats mt-24">

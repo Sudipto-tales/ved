@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, DataTable, EmptyState, Field, Icon, PageHeader, Select, StatCard } from '@/shared/ui';
 import { Can } from '@/shared/authz/Can';
+import { SetupGate } from '@/features/dashboard/setup/SetupGate';
 import { useAllStages, useCreateSection, usePrograms, useSections, type Section } from '../api/academicsApi';
 
 export default function SectionsPage() {
@@ -24,6 +25,8 @@ export default function SectionsPage() {
   return (
     <div>
       <PageHeader title="Sections" subtitle="A teachable group within a stage for the current academic year." />
+
+      <SetupGate step="sections" />
 
       <div className="grid-stats">
         <StatCard label="Sections" value={rows.length} accent />
