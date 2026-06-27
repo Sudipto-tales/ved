@@ -12,7 +12,7 @@ export default function ProgramStageDetailPage() {
   const sections = (sectionsData?.sections ?? []).filter((s) => s.program_stage_id === id);
 
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <PageHeader title={stage ? stage.name : 'Stage'} subtitle="The subjects in this stage's curriculum and the sections that run it." />
       <Link to="/program-stages" className="subtle" style={{ fontSize: 13 }}>← Back to stages</Link>
 

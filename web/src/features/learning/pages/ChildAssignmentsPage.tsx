@@ -6,7 +6,7 @@ import { Card, EmptyState, Icon, PageHeader } from '@/shared/ui';
 
 export default function ChildAssignmentsPage() {
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <PageHeader
         title="Child Assignment Status"
         subtitle="See what your child has been set, what's submitted, and how it was graded."

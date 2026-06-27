@@ -11,7 +11,7 @@ export default function ChildTimetablePage() {
   const { childId = '' } = useParams();
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div>
       <PageHeader
         title="Timetable"
         subtitle="Your child's weekly class schedule, as published by the school."

@@ -62,7 +62,7 @@ export default function NotificationsPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 920 }}>
+    <div>
       <PageHeader
         title="Notification Center"
         subtitle="A log of notifications sent across channels. Illustrative data — the delivery pipeline is not yet wired."

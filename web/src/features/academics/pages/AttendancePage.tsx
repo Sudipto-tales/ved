@@ -43,7 +43,7 @@ export default function AttendancePage() {
   };
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader title="Attendance" subtitle="Append-only — a re-mark adds new rows; the latest by clock wins. Counts are derived on read." />
 
       <Card className="mt-16">

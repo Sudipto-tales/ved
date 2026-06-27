@@ -78,7 +78,7 @@ export default function UserRolesPage() {
   const roles = useRoles();
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader
         title="Assign Roles to Users"
         subtitle="A member may hold several roles; effective permissions are the union across them."

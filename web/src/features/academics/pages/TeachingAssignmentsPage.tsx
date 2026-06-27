@@ -32,7 +32,7 @@ export default function TeachingAssignmentsPage() {
   const rows = data?.teaching_assignments ?? [];
 
   return (
-    <div style={{ maxWidth: 960 }}>
+    <div>
       <PageHeader title="Teaching assignments" subtitle="Who teaches what, where — a teacher bound to a section + subject." />
 
       <div className="grid-stats">

@@ -37,7 +37,7 @@ export default function FeeStructureDetailPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div>
       <PageHeader title="Fee Structure" subtitle="Component fee heads and their amounts. Generating invoices applies this bundle to every student in the cohort." />
       <Link to="/fee-structures" className="subtle" style={{ fontSize: 13 }}>← Back to structures</Link>
       <div className="mt-8"><Badge tone="warning">Preview · structure {id.slice(0, 8)}</Badge></div>

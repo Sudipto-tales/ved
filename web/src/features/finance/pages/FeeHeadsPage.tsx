@@ -17,7 +17,7 @@ export default function FeeHeadsPage() {
   const recurring = heads.filter((h) => h.kind === 'RECURRING').length;
 
   return (
-    <div style={{ maxWidth: 900 }}>
+    <div>
       <PageHeader title="Fee Heads" subtitle="The chart of fee accounts every invoice line maps to. Define them once, reuse everywhere." />
 
       <div className="grid-stats mt-16">

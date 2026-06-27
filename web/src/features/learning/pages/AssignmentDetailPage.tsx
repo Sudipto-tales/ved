@@ -30,7 +30,7 @@ export default function AssignmentDetailPage() {
   const { data, isLoading, error } = useSubmissions(id);
 
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <PageHeader title="Submissions & grading" subtitle="Latest submission per student. Grading an assignment with max marks writes into the append-only marks ledger." />
       <Link to="/teacher/assignments" className="subtle" style={{ fontSize: 13 }}>← Back to assignments</Link>
       <Card className="mt-16">

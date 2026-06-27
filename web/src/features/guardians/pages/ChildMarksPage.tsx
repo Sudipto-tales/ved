@@ -33,7 +33,7 @@ export default function ChildMarksPage() {
   const selectedExam = examList.find((e) => e.id === examId);
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div>
       <PageHeader
         title="Marks & report card"
         subtitle="Effective marks per subject — the latest grade from the school's marks ledger."

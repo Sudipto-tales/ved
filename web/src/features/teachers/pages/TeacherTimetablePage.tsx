@@ -7,7 +7,7 @@ const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function TeacherTimetablePage() {
   return (
-    <div style={{ maxWidth: 920 }}>
+    <div>
       <PageHeader title="My timetable" subtitle="Your weekly teaching schedule." />
 
       <Card>

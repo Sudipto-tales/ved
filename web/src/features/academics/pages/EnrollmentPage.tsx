@@ -13,7 +13,7 @@ export default function EnrollmentPage() {
   const rows = data?.enrollments ?? [];
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader title="Enrollment" subtitle="Look up a section's roster. Manage enrollments from the section's detail page." />
 
       <Card className="mt-16">

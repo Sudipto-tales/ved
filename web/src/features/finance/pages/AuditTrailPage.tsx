@@ -27,7 +27,7 @@ export default function AuditTrailPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 960 }}>
+    <div>
       <PageHeader title="Financial Audit Trail" subtitle="Every finance mutation is recorded immutably (row + outbox + audit, one tx). This view surfaces that trail." />
       <Badge tone="warning">Preview — a finance-audit query endpoint lands in a later milestone</Badge>
 

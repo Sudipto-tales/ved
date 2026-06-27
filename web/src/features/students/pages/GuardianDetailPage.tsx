@@ -43,7 +43,7 @@ export default function GuardianDetailPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div>
       <PageHeader title={data.name} subtitle="Guardian record" />
       <Link to="/guardians" className="subtle" style={{ fontSize: 13 }}>← Back to guardians</Link>
 

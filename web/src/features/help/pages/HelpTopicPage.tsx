@@ -25,7 +25,7 @@ export default function HelpTopicPage() {
 
   if (!topic) {
     return (
-      <div style={{ maxWidth: 680 }}>
+      <div>
         <PageHeader title="Help topic not found" />
         <Card>
           <p className="muted">We couldn’t find that help topic.</p>
@@ -38,7 +38,7 @@ export default function HelpTopicPage() {
   const related = (topic.related ?? []).map(getTopic).filter(Boolean);
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div>
       <Link to="/help" className="help-back">
         <Icon name="arrow-left" size={15} /> All help
       </Link>

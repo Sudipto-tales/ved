@@ -59,7 +59,7 @@ export default function NoticesPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 860 }}>
+    <div>
       <PageHeader
         title="Notices & Announcements"
         subtitle="Broadcast notices to a chosen audience. Preview only — publishing is not yet wired to the backend."

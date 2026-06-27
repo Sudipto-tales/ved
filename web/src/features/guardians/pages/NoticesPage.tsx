@@ -6,7 +6,7 @@ import { Card, EmptyState, Icon, PageHeader } from '@/shared/ui';
 
 export default function NoticesPage() {
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div>
       <PageHeader
         title="Notices"
         subtitle="Announcements and circulars the school has shared with guardians."

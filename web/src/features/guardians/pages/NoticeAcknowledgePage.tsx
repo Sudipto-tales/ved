@@ -11,7 +11,7 @@ export default function NoticeAcknowledgePage() {
   const [acknowledged, setAcknowledged] = useState(false);
 
   return (
-    <div style={{ maxWidth: 640 }}>
+    <div>
       <PageHeader
         title="Acknowledge notice"
         subtitle="Some notices require your confirmation that you've read them."

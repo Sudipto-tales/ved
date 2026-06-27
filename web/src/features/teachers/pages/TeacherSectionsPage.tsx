@@ -7,7 +7,7 @@ import { Button, Card, EmptyState, Icon, PageHeader } from '@/shared/ui';
 
 export default function TeacherSectionsPage() {
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader title="My sections & students" subtitle="The classes you teach and the students in them." />
 
       <Card>

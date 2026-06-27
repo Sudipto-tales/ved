@@ -22,7 +22,7 @@ export default function SectionsPage() {
   const rows = data?.sections ?? [];
 
   return (
-    <div style={{ maxWidth: 960 }}>
+    <div>
       <PageHeader title="Sections" subtitle="A teachable group within a stage for the current academic year." />
 
       <div className="grid-stats">

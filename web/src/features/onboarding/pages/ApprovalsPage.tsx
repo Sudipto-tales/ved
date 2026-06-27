@@ -69,7 +69,7 @@ export default function ApprovalsPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 920 }}>
+    <div>
       <PageHeader
         title="Pending approvals"
         subtitle="Submitted onboarding records awaiting a second approver. Preview only — decisions are local until the approval engine is wired."

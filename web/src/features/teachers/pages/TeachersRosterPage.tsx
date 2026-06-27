@@ -61,7 +61,7 @@ export default function TeachersRosterPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader title="Teachers" subtitle="Teaching staff. Onboarding creates the login, membership, and profile in one transaction." />
 
       <div className="grid-stats">

@@ -81,7 +81,7 @@ export default function RolesPage() {
   const mutationError = createRole.error || updateRole.error || deleteRole.error;
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader
         title="Roles & Permissions"
         subtitle="Roles are dynamic bundles of the fixed permission catalog. The server gate (requirePermission) is authoritative."

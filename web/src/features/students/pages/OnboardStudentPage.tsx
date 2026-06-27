@@ -140,7 +140,7 @@ export default function OnboardStudentPage() {
   // --- Success: show the generated credentials once ---
   if (result) {
     return (
-      <div style={{ maxWidth: 560 }}>
+      <div>
         <PageHeader title="Student onboarded" subtitle="Hand these credentials to the student. The password is shown only once and must be reset on first login." />
         <Card className="mt-16">
           <div className="row"><span className="muted">Login</span><code>{result.login_identifier}</code></div>
@@ -176,7 +176,7 @@ export default function OnboardStudentPage() {
   const guardianRequired = cfg('guardians').required;
 
   return (
-    <div style={{ maxWidth: 560 }}>
+    <div>
       <PageHeader title="Onboard student" subtitle="Creates the login, membership, admission record, and guardian links in one transaction." />
 
       {formError && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{formError}</p>}

@@ -38,7 +38,7 @@ export default function FinesPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 900 }}>
+    <div>
       <PageHeader title="Fines" subtitle="Late-fee and penalty rules that post FINE ledger entries when a due date lapses." />
       <Badge tone="warning">Preview — backing tables land in a later milestone</Badge>
 

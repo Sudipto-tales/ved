@@ -9,7 +9,7 @@ export default function ChildFeesPage() {
   const { data, isLoading, error } = useChildFees(childId);
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div>
       <PageHeader title="Fees" subtitle="Dues and payments for your child, straight from the append-only ledger." />
       <Link to="/guardian" className="subtle" style={{ fontSize: 13 }}>← Back to my children</Link>
       {isLoading && <div className="mt-16"><Spinner /></div>}

@@ -99,7 +99,7 @@ export default function DropdownsPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div>
       <PageHeader
         title="Dynamic Dropdowns"
         subtitle="Curate the option lists used across onboarding forms — gender, blood group, category, and more."

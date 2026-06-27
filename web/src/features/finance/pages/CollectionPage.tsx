@@ -44,7 +44,7 @@ export default function CollectionPage() {
   }
 
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <PageHeader title="Fee Collection Counter" subtitle="Take a payment in seconds. Outstanding is the live derived balance; every receipt number is gapless." />
 
       <Card className="mt-16">

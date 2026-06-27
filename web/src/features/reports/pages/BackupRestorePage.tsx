@@ -50,7 +50,7 @@ export default function BackupRestorePage() {
   ];
 
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <PageHeader
         title="Backup & Restore"
         subtitle="Per-tenant snapshots for disaster recovery. Preview only — backup operations are not yet wired."

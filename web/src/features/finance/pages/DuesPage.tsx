@@ -90,7 +90,7 @@ export default function DuesPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 900 }}>
+    <div>
       <PageHeader title="Dues & Aging" subtitle={`Students carrying a positive derived balance (top ${MAX_STUDENTS}). Click through to collect.`} />
 
       <div className="grid-stats mt-16">

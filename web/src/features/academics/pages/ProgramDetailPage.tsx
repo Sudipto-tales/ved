@@ -16,7 +16,7 @@ export default function ProgramDetailPage() {
   const rows = data?.stages ?? [];
 
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <PageHeader title={program ? program.name : 'Program'} subtitle="Stages divide a program into ordered levels (grades / years / semesters)." />
       <Link to="/programs" className="subtle" style={{ fontSize: 13 }}>← Back to programs</Link>
 

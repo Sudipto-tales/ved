@@ -59,7 +59,7 @@ export default function StudentsRosterPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader
         title="Students"
         subtitle="Admission records for this school. Onboarding creates the login, membership, profile, and guardian links in one transaction."

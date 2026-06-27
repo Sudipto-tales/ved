@@ -62,7 +62,7 @@ export default function InvoicesPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 960 }}>
+    <div>
       <PageHeader title="Invoices" subtitle="Recent demand documents. Click a row to open the student's ledger. Status is derived, never edited." />
 
       <div className="grid-stats mt-16">

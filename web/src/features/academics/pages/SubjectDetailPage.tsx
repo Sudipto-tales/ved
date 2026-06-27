@@ -10,7 +10,7 @@ export default function SubjectDetailPage() {
   const subject = data?.subjects.find((s) => s.id === id);
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div>
       <PageHeader title={subject ? subject.name : 'Subject'} subtitle="A subject in the catalogue." />
       <Link to="/subjects" className="subtle" style={{ fontSize: 13 }}>← Back to subjects</Link>
 

@@ -5,7 +5,7 @@ import { Badge, Card, EmptyState, Icon, PageHeader } from '@/shared/ui';
 
 export default function StudentProfilePage() {
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div>
       <PageHeader title="My profile" subtitle="Your admission record and registered guardians." />
 
       <Card className="mt-16">

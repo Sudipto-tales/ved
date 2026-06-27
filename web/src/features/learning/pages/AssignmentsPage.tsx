@@ -15,7 +15,7 @@ export default function AssignmentsPage() {
   const [due, setDue] = useState('');
 
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <PageHeader title="Assignments" subtitle="Publish assignments to a class/subject. A graded assignment with max marks flows into the marks ledger automatically." />
 
       <Card className="mt-16">

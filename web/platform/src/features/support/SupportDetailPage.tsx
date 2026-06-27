@@ -39,7 +39,7 @@ export default function SupportDetailPage() {
   }
 
   return (
-    <div style={{ maxWidth: 920, display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
         <Link to="/support" className="flex gap-8" style={{ alignItems: 'center', fontSize: 13, marginBottom: 12 }}>
           <Icon name="arrow-left" size={15} /> Support Console

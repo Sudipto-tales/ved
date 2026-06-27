@@ -33,7 +33,7 @@ export default function PayFeesPage() {
   const nothingDue = !isLoading && outstanding <= 0;
 
   return (
-    <div style={{ maxWidth: 640 }}>
+    <div>
       <PageHeader
         title="Pay fees online"
         subtitle="Settle your child's outstanding dues securely — straight from the school's ledger."

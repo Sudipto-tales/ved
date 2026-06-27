@@ -10,7 +10,7 @@ export default function ChildAttendancePage() {
   const s = data?.summary ?? {};
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div>
       <PageHeader title="Attendance" subtitle="Derived from attendance events — the latest mark per day, summed." />
       <Link to="/guardian" className="subtle" style={{ fontSize: 13 }}>← Back to my children</Link>
       {isLoading && <div className="mt-16"><Spinner /></div>}

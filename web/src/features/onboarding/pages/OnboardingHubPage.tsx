@@ -45,7 +45,7 @@ const STEPS = [
 
 export default function OnboardingHubPage() {
   return (
-    <div style={{ maxWidth: 920 }}>
+    <div>
       <PageHeader
         title="Onboarding"
         subtitle="Bring people into the institution. Each flow runs the shared onboarding engine — one transaction, credentials issued once."

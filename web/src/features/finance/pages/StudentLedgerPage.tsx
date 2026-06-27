@@ -24,7 +24,7 @@ export default function StudentLedgerPage() {
   const mutErr = issue.error || pay.error || voidPay.error;
 
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <PageHeader title="Student ledger" subtitle="Append-only & event-sourced — corrections are reversal rows, never edits or deletes." />
       <Link to="/ledger" className="subtle" style={{ fontSize: 13 }}>← Back to ledgers</Link>
 

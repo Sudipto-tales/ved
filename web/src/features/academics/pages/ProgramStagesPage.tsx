@@ -9,7 +9,7 @@ export default function ProgramStagesPage() {
   const rows = data?.stages ?? [];
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader title="Program stages" subtitle="Every stage across all programs — the levels sections and curriculum hang off." />
 
       <div className="grid-stats">

@@ -80,7 +80,7 @@ export default function MaterialsPage() {
   const assignments = useAssignments(taId);
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader
         title="Materials"
         subtitle="Course content attached to an assignment. Pick a teaching assignment, choose an assignment, then attach notes, links, or files."

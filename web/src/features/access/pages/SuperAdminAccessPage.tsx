@@ -14,7 +14,7 @@ export default function SuperAdminAccessPage() {
   }
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div>
       <PageHeader
         title="Super-Admin Access"
         subtitle="Control whether VED platform support can sign in to your school to help with setup or troubleshooting."

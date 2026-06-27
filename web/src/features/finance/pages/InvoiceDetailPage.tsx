@@ -22,7 +22,7 @@ export default function InvoiceDetailPage() {
     : undefined;
 
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div>
       <PageHeader title="Invoice" subtitle="Read-only demand document. Line-level detail lives in the student's append-only ledger." />
       <Link to="/invoices" className="subtle" style={{ fontSize: 13 }}>← Back to invoices</Link>
 
