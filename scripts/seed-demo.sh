@@ -10,13 +10,13 @@
 # A record of what was created is written to scripts/demo-seed-record.json so it can be
 # removed in one command:  ./ved.sh clean-demo
 #
-# Env overrides: CP_URL (default :8080), NODE_URL (default :8081), STUDENTS (default 100),
+# Env overrides: CP_URL (default :8080), NODE_URL (default :8091), STUDENTS (default 100),
 #                SUPER_EMAIL / SUPER_PASS (platform superadmin).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 CP_URL=${CP_URL:-http://localhost:8080}
-NODE_URL=${NODE_URL:-http://localhost:8081}
+NODE_URL=${NODE_URL:-http://localhost:8091}
 SUPER_EMAIL=${SUPER_EMAIL:-super@ved.platform}
 SUPER_PASS=${SUPER_PASS:-super1234}
 STUDENTS=${STUDENTS:-100}

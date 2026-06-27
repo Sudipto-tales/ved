@@ -62,7 +62,7 @@ secrets** (`JWT_*`, `MINIO_ROOT_PASSWORD`) before anything real.
 | `nats` | nats:2.10 (`-js` JetStream) | 4222, 8222 (monitor) | always (infra) |
 | `minio` | minio | 9000 (API), 9001 (console) | always (infra) |
 | `controlplane` | build `./server` (target `controlplane`) | 8080 | `app` |
-| `node` | build `./server` (target `node`) | 8081 | `app` |
+| `node` | build `./server` (target `node`) | 8091 | `app` |
 | `web` | build `./web` | 5173 | `app` |
 
 ### Why the `app` profile

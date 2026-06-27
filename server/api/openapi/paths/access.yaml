@@ -1,0 +1,396 @@
+# access slice contract (M2 RBAC). The dynamic side of RBAC: roles CRUD, designations,
+# member-role assignment, self-service permissions, and read-only tenant-setup GETs.
+# Mirrors internal/features/access/access.go.
+openapi: 3.1.0
+info:
+  title: VED access slice
+  version: 1.0.0
+paths: {}
+
+MePermissions:
+  get:
+    operationId: getMyPermissions
+    summary: The caller's effective permission keys in the active tenant
+    description: >
+      Self-service, no gate — every member may read their own permissions. The FE
+      uses this to render. tenant.admin expands to the full catalog.
+    tags: [access]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Effective permission keys.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permissions]
+              properties:
+                permissions:
+                  type: array
+                  items: { type: string }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+PermissionCatalog:
+  get:
+    operationId: listPermissions
+    summary: The fixed permission catalog (for building roles)
+    tags: [access]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Catalog rows.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [permissions]
+              properties:
+                permissions:
+                  type: array
+                  items: { $ref: '#/schemas/PermissionDTO' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+Roles:
+  get:
+    operationId: listRoles
+    summary: Roles in the tenant
+    tags: [access]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Roles with their permission bundles.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [roles]
+              properties:
+                roles:
+                  type: array
+                  items: { $ref: '#/schemas/RoleDTO' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+  post:
+    operationId: createRole
+    summary: Create a role with a permission bundle
+    tags: [access]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/schemas/RoleInput' }
+    responses:
+      '201':
+        description: Role created.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/RoleDTO' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+RoleByID:
+  put:
+    operationId: updateRole
+    summary: Rename a role and replace its permission set
+    tags: [access]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/schemas/RoleInput' }
+    responses:
+      '200':
+        description: Role updated.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/RoleDTO' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '404': { $ref: '../components/common.yaml#/components/responses/NotFound' }
+      '409':
+        description: System roles cannot be modified.
+        content:
+          application/json:
+            schema: { $ref: '../components/common.yaml#/components/schemas/Error' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+  delete:
+    operationId: deleteRole
+    summary: Delete a (non-system) role
+    tags: [access]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '204':
+        description: Role deleted.
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '404': { $ref: '../components/common.yaml#/components/responses/NotFound' }
+      '409':
+        description: System roles cannot be deleted.
+        content:
+          application/json:
+            schema: { $ref: '../components/common.yaml#/components/schemas/Error' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+Designations:
+  get:
+    operationId: listDesignations
+    summary: Designations in the tenant
+    tags: [access]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Designations.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [designations]
+              properties:
+                designations:
+                  type: array
+                  items: { $ref: '#/schemas/DesignationDTO' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+  post:
+    operationId: createDesignation
+    summary: Create a designation
+    tags: [access]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/schemas/DesignationInput' }
+    responses:
+      '201':
+        description: Designation created.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/DesignationDTO' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+Members:
+  get:
+    operationId: listMembers
+    summary: Memberships with their assigned role ids
+    tags: [access]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Members.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [members]
+              properties:
+                members:
+                  type: array
+                  items: { $ref: '#/schemas/MemberDTO' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+MemberRoles:
+  put:
+    operationId: setMemberRoles
+    summary: Replace the roles a member holds
+    tags: [access]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Membership id.
+        schema: { type: string, format: uuid }
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/schemas/MemberRolesInput' }
+    responses:
+      '204':
+        description: Roles assigned.
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '404': { $ref: '../components/common.yaml#/components/responses/NotFound' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+TenantProfile:
+  get:
+    operationId: getTenantProfile
+    summary: Read-only school/college profile
+    tags: [access]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Tenant profile.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/TenantProfileDTO' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '404': { $ref: '../components/common.yaml#/components/responses/NotFound' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+AcademicYears:
+  get:
+    operationId: listAcademicYears
+    summary: Read-only academic years
+    tags: [access]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Academic years.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [academic_years]
+              properties:
+                academic_years:
+                  type: array
+                  items: { $ref: '#/schemas/AcademicYearDTO' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+schemas:
+  PermissionDTO:
+    type: object
+    required: [key, description]
+    properties:
+      key: { type: string }
+      description: { type: string }
+
+  RoleInput:
+    type: object
+    required: [name]
+    properties:
+      name: { type: string }
+      permissions:
+        type: array
+        items: { type: string }
+
+  RoleDTO:
+    type: object
+    required: [id, name, is_system, permissions]
+    properties:
+      id: { type: string, format: uuid }
+      name: { type: string }
+      is_system: { type: boolean }
+      permissions:
+        type: array
+        items: { type: string }
+
+  DesignationInput:
+    type: object
+    required: [name]
+    properties:
+      name: { type: string }
+      applies_to_user_type: { type: string }
+
+  DesignationDTO:
+    type: object
+    required: [id, name]
+    properties:
+      id: { type: string, format: uuid }
+      name: { type: string }
+      applies_to_user_type: { type: string }
+
+  MemberDTO:
+    type: object
+    required: [membership_id, login_identifier, user_type, status, role_ids]
+    properties:
+      membership_id: { type: string, format: uuid }
+      login_identifier: { type: string }
+      user_type: { type: string }
+      status: { type: string }
+      role_ids:
+        type: array
+        items: { type: string, format: uuid }
+
+  MemberRolesInput:
+    type: object
+    required: [role_ids]
+    properties:
+      role_ids:
+        type: array
+        items: { type: string, format: uuid }
+
+  TenantProfileDTO:
+    type: object
+    required: [id, display_name, slug, institution_type]
+    properties:
+      id: { type: string, format: uuid }
+      display_name: { type: string }
+      slug: { type: string }
+      institution_type: { type: string }
+
+  AcademicYearDTO:
+    type: object
+    required: [id, name, start_date, end_date, is_current]
+    properties:
+      id: { type: string, format: uuid }
+      name: { type: string }
+      start_date: { type: string }
+      end_date: { type: string }
+      is_current: { type: boolean }

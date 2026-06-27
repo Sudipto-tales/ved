@@ -5,6 +5,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, Field, PageHeader, Select, Spinner } from '@/shared/ui';
+import { isReservedSlug } from '@/shared/tenant/reserved';
 import { ApiError } from '../../shared/api';
 import { usePlans, useRegister } from './api';
 
@@ -31,11 +32,14 @@ export default function SignupRegisterPage() {
 
   // Auto-derive the slug from the school name until the user edits it directly.
   const effectiveSlug = slugDirty ? slug : slugify(schoolName);
-  const slugValid = SLUG_RE.test(effectiveSlug);
+  const slugReserved = isReservedSlug(effectiveSlug);
+  const slugValid = SLUG_RE.test(effectiveSlug) && !slugReserved;
   const slugHint = useMemo(() => {
     if (!effectiveSlug) return 'Lowercase letters, numbers and dashes; 2–31 chars.';
-    return slugValid ? `Your node will bind to /${effectiveSlug}` : 'Invalid — use lowercase letters, numbers, dashes (start with a letter).';
-  }, [effectiveSlug, slugValid]);
+    if (slugReserved) return 'That slug is reserved — please choose another.';
+    if (!SLUG_RE.test(effectiveSlug)) return 'Invalid — use lowercase letters, numbers, dashes (start with a letter).';
+    return `Your school will be reached at ${effectiveSlug}.ved.com`;
+  }, [effectiveSlug, slugReserved]);
 
   const planList = plans.data?.plans ?? [];
   const canSubmit = schoolName && slugValid && adminName && adminEmail && planId && !register.isPending;

@@ -12,6 +12,7 @@ import { AppShell } from '@/app/layouts/AppShell';
 import { AuthGuard } from '@/app/guards/AuthGuard';
 import { TenantGuard } from '@/app/guards/TenantGuard';
 import { PermissionGuard } from '@/app/guards/PermissionGuard';
+import { PersonaGuard } from '@/app/guards/PersonaGuard';
 import { PlannedPage } from '@/app/PlannedPage';
 import { publicPages, protectedPages } from '@/app/pages';
 import type { PageDef } from '@/shared/types/page';
@@ -51,7 +52,10 @@ export const router = createBrowserRouter([
             element: <AppShell />,
             children: [
               { index: true, element: <PersonaHome /> },
-              ...protectedPages.map((p) => ({ path: p.path, element: elementFor(p) })),
+              ...protectedPages.map((p) => ({
+                path: p.path,
+                element: <PersonaGuard persona={p.persona}>{elementFor(p)}</PersonaGuard>,
+              })),
             ],
           },
         ],

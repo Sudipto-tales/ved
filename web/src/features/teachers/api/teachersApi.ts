@@ -1,48 +1,35 @@
-// Typed hooks for the teachers slice (M5) — thin wrappers over the shared api client,
-// mirroring the backend contract (internal/features/teachers).
+// Teachers slice FE surface (M5). Types + HTTP calls are GENERATED from the frozen
+// OpenAPI spec (server/api/openapi) via `npm run gen:api` — see studentsApi.ts for the
+// reference pattern. The academics-portal helpers below stay on the shared client until
+// the academics spec is authored.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
 import { queryKeys } from '@/shared/api/queryKeys';
+import { onboardTeacher, listTeachers, getTeacher } from '@/shared/api/generated/teachers/teachers';
+import type {
+  OnboardTeacherBody,
+  OnboardTeacher201,
+  ListTeachers200TeachersItem,
+  GetTeacher200,
+} from '@/shared/api/generated/model';
 
-export interface OnboardInput {
-  name: string;
-  joining_date?: string;
-  employee_code?: string;
-  specialization?: string;
-}
-
-export interface OnboardResult {
-  teacher_id: string;
-  membership_id: string;
-  login_identifier: string;
-  temp_password: string;
-}
-
-export interface TeacherRow {
-  id: string;
-  name: string;
-  login_identifier: string;
-  status: string;
-  employee_code?: string;
-  specialization?: string;
-  created_at: string;
-}
-
-export interface TeacherDetail extends TeacherRow {
-  joining_date?: string;
-}
+// Generated types, re-exported under the names this slice's components already use.
+export type OnboardInput = OnboardTeacherBody;
+export type OnboardResult = OnboardTeacher201;
+export type TeacherRow = ListTeachers200TeachersItem;
+export type TeacherDetail = GetTeacher200;
 
 export function useTeachers() {
   return useQuery({
     queryKey: queryKeys.teachers,
-    queryFn: () => api.get<{ teachers: TeacherRow[] }>('/api/v1/teachers'),
+    queryFn: ({ signal }) => listTeachers(signal),
   });
 }
 
 export function useTeacher(id: string) {
   return useQuery({
     queryKey: [...queryKeys.teachers, id],
-    queryFn: () => api.get<TeacherDetail>(`/api/v1/teachers/${id}`),
+    queryFn: ({ signal }) => getTeacher(id, signal),
     enabled: !!id,
   });
 }
@@ -50,7 +37,7 @@ export function useTeacher(id: string) {
 export function useOnboardTeacher() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: OnboardInput) => api.post<OnboardResult>('/api/v1/teachers/onboard', body),
+    mutationFn: (body: OnboardInput) => onboardTeacher(body),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.teachers }),
   });
 }

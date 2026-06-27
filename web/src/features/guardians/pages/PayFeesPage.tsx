@@ -1,8 +1,8 @@
-// Pay fees online (M7, Tier-2) — DESIGNED SCAFFOLD over a REAL read. The outstanding amount
-// is the live derived balance from the finance ledger (GET fees, the same Σ DEBIT − Σ CREDIT
-// the school sees). There is no payment-gateway backend yet, so the method picker and Pay
-// button are a finished-looking preview: Pay is disabled and an EmptyState explains gateway
-// payment is coming. When the gateway lands, Pay POSTs through the guardian.pay_fees write.
+// Pay fees online (M7, Tier-2) — REAL guarded write. The outstanding amount is the live
+// derived balance from the finance ledger (GET fees, the same Σ DEBIT − Σ CREDIT the school
+// sees). Pay POSTs through guardian.pay_fees: a SIMULATED gateway that records a real payment
+// (gapless receipt + CREDIT) in the same finance ledger, gated server-side by can_pay. When a
+// real gateway lands it slots in behind the same endpoint.
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
@@ -16,17 +16,18 @@ import {
   Spinner,
   StatCard,
 } from '@/shared/ui';
-import { useChildFees } from '../api/guardianApi';
+import { useChildFees, usePayChildFees } from '../api/guardianApi';
 
 const METHODS = [
-  { id: 'upi', label: 'UPI' },
-  { id: 'card', label: 'Credit / Debit card' },
-  { id: 'netbanking', label: 'Net banking' },
+  { id: 'UPI', label: 'UPI' },
+  { id: 'CARD', label: 'Credit / Debit card' },
+  { id: 'NETBANKING', label: 'Net banking' },
 ];
 
 export default function PayFeesPage() {
   const { childId = '' } = useParams();
   const { data, isLoading, error } = useChildFees(childId);
+  const pay = usePayChildFees(childId);
   const [method, setMethod] = useState(METHODS[0].id);
   const outstanding = data?.outstanding ?? 0;
   const nothingDue = !isLoading && outstanding <= 0;
@@ -76,17 +77,27 @@ export default function PayFeesPage() {
                 </span>
               </div>
               <div className="mt-16">
-                <Button disabled title="Online payment is not available yet">
-                  Pay {outstanding.toFixed(2)}
+                <Button
+                  disabled={pay.isPending || outstanding <= 0}
+                  onClick={() => pay.mutate({ amount: outstanding, method })}
+                >
+                  {pay.isPending ? 'Processing…' : `Pay ${outstanding.toFixed(2)}`}
                 </Button>
               </div>
-              <div className="mt-16">
-                <EmptyState
-                  icon={<Icon name="wallet" />}
-                  title="Online payment coming soon"
-                  desc="Paying fees online through a payment gateway is on the way. For now, please pay at the school office — payments you make there appear here automatically."
-                />
-              </div>
+              {pay.isError && (
+                <p className="mt-16" style={{ color: 'var(--danger)' }}>
+                  {String((pay.error as Error)?.message ?? pay.error)}
+                </p>
+              )}
+              {pay.isSuccess && (
+                <div className="mt-16">
+                  <EmptyState
+                    icon={<Icon name="wallet" />}
+                    title="Payment recorded"
+                    desc={`Receipt ${pay.data.receipt_no}. Your child's balance has been updated.`}
+                  />
+                </div>
+              )}
             </Card>
           )}
         </>

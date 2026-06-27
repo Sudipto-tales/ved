@@ -67,16 +67,21 @@ export default function GuardiansPage() {
       align: 'right',
       cell: (g) => (
         <Can permission="student.update">
-          <Button
-            variant="ghost"
-            disabled={promote.isPending}
-            onClick={(e) => {
-              e.stopPropagation();
-              doPromote(g);
-            }}
-          >
-            {promotingId === g.id ? 'Promoting…' : 'Promote to portal'}
-          </Button>
+          <span className="flex gap-8" style={{ justifyContent: 'flex-end' }}>
+            <button
+              type="button"
+              className="icon-btn"
+              title={promotingId === g.id ? 'Promoting…' : 'Promote to portal'}
+              aria-label="Promote to portal"
+              disabled={promote.isPending}
+              onClick={(e) => {
+                e.stopPropagation();
+                doPromote(g);
+              }}
+            >
+              <Icon name="user-plus" />
+            </button>
+          </span>
         </Can>
       ),
     },
@@ -124,6 +129,8 @@ export default function GuardiansPage() {
           rows={guardians}
           rowKey={(g) => g.id}
           loading={isLoading}
+          searchable
+          searchText={(g) => `${g.name} ${g.phone} ${g.email ?? ''} ${g.relation_default}`}
           onRowClick={(g) => navigate(`/guardians/${g.id}`)}
           empty={
             <EmptyState

@@ -49,12 +49,23 @@ export default function ProgramsPage() {
           rows={rows}
           rowKey={(r) => r.id}
           onRowClick={(r) => nav(`/programs/${r.id}`)}
+          searchable
+          searchText={(r) => `${r.name} ${r.code}`}
           empty={<EmptyState icon={<Icon name="graduation" />} title="No programs yet" desc="Create the first program to start building your academic structure." />}
           columns={[
             { header: 'Name', cell: (r) => <span style={{ fontWeight: 600 }}>{r.name}</span> },
             { header: 'Code', cell: (r) => <span className="subtle">{r.code}</span> },
             { header: 'Mode', cell: (r) => <Badge tone="info">{r.enrollment_mode}</Badge> },
             { header: 'Status', cell: (r) => <Badge tone={r.status === 'ACTIVE' ? 'success' : 'neutral'}>{r.status}</Badge> },
+            {
+              header: '',
+              align: 'right',
+              cell: (r) => (
+                <span className="flex gap-8" style={{ justifyContent: 'flex-end' }}>
+                  <button type="button" className="icon-btn" title="View" aria-label="View" onClick={(e) => { e.stopPropagation(); nav(`/programs/${r.id}`); }}><Icon name="eye" /></button>
+                </span>
+              ),
+            },
           ]}
         />
       </Card>

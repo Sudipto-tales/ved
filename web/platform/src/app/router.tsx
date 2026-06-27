@@ -11,6 +11,7 @@ import { PlannedPage } from './PlannedPage';
 import { PlatformShell } from './PlatformShell';
 import { usePlatformAuth } from '../shared/auth';
 import LoginPage from '../features/auth/LoginPage';
+import LandingPage from '../features/marketing/LandingPage';
 import { SignupLayout } from '../features/signup/SignupLayout';
 import SignupLandingPage from '../features/signup/SignupLandingPage';
 import SignupRegisterPage from '../features/signup/SignupRegisterPage';
@@ -20,6 +21,13 @@ import SignupStatusPage from '../features/signup/SignupStatusPage';
 function AuthGuard() {
   const { isAuthed } = usePlatformAuth();
   return isAuthed ? <Outlet /> : <Navigate to="/login" replace />;
+}
+
+// Public home ("/"). On the apex (ved.com / ved.test) this is the marketing landing; a
+// signed-in superadmin is sent straight to their console.
+function HomeRoute() {
+  const { isAuthed } = usePlatformAuth();
+  return isAuthed ? <Navigate to="/dashboard" replace /> : <LandingPage />;
 }
 
 function AuthLayout() {
@@ -49,6 +57,8 @@ function elementFor(page: PageDef): ReactNode {
 }
 
 export const router = createBrowserRouter([
+  // PUBLIC marketing landing — the apex front door (ved.test / www.ved.com).
+  { path: '/', element: <HomeRoute /> },
   { element: <AuthLayout />, children: [{ path: '/login', element: <LoginPage /> }] },
   // PUBLIC self-registration site — UNAUTHENTICATED, outside the AuthGuard (docs/01).
   {
@@ -66,7 +76,7 @@ export const router = createBrowserRouter([
       {
         element: <PlatformShell />,
         children: [
-          { index: true, element: <Navigate to="/dashboard" replace /> },
+          // "/" is the public landing (HomeRoute); authed admins are routed to /dashboard there.
           ...platformPages.map((p) => ({ path: p.path, element: elementFor(p) })),
         ],
       },

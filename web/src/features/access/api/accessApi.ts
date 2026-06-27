@@ -1,49 +1,37 @@
-// Typed hooks for the access (RBAC) slice — thin wrappers over the shared api client,
-// mirroring the backend contract (internal/features/access). No component calls fetch
-// directly (plan/bridges.md §1).
+// Access (RBAC) slice FE surface. Types + HTTP calls are GENERATED from the frozen
+// OpenAPI spec (server/api/openapi) via `npm run gen:api` — see studentsApi.ts for the
+// reference pattern. Hook names/signatures are unchanged so components need no edits.
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/shared/api/client';
+import {
+  listPermissions,
+  listRoles,
+  createRole,
+  updateRole,
+  deleteRole,
+  listMembers,
+  setMemberRoles,
+  listDesignations,
+  createDesignation,
+  getTenantProfile,
+  listAcademicYears,
+} from '@/shared/api/generated/access/access';
+import type {
+  ListPermissions200PermissionsItem,
+  ListRoles200RolesItem,
+  ListMembers200MembersItem,
+  ListDesignations200DesignationsItem,
+  GetTenantProfile200,
+  ListAcademicYears200AcademicYearsItem,
+} from '@/shared/api/generated/model';
 
-export interface Permission {
-  key: string;
-  description: string;
-}
-
-export interface Role {
-  id: string;
-  name: string;
-  is_system: boolean;
-  permissions: string[];
-}
-
-export interface Member {
-  membership_id: string;
-  login_identifier: string;
-  user_type: string;
-  status: string;
-  role_ids: string[];
-}
-
-export interface Designation {
-  id: string;
-  name: string;
-  applies_to_user_type?: string | null;
-}
-
-export interface TenantProfile {
-  id: string;
-  display_name: string;
-  slug: string;
-  institution_type: string;
-}
-
-export interface AcademicYear {
-  id: string;
-  name: string;
-  start_date: string;
-  end_date: string;
-  is_current: boolean;
-}
+// Generated types, re-exported under the names this slice's components already use.
+export type Permission = ListPermissions200PermissionsItem;
+export type Role = ListRoles200RolesItem;
+export type Member = ListMembers200MembersItem;
+export type Designation = ListDesignations200DesignationsItem;
+export type TenantProfile = GetTenantProfile200;
+export type AcademicYear = ListAcademicYears200AcademicYearsItem;
 
 export const accessKeys = {
   permissions: ['access', 'permissions'] as const,
@@ -57,22 +45,21 @@ export const accessKeys = {
 export function usePermissionCatalog() {
   return useQuery({
     queryKey: accessKeys.permissions,
-    queryFn: () => api.get<{ permissions: Permission[] }>('/api/v1/access/permissions'),
+    queryFn: ({ signal }) => listPermissions(signal),
   });
 }
 
 export function useRoles() {
   return useQuery({
     queryKey: accessKeys.roles,
-    queryFn: () => api.get<{ roles: Role[] }>('/api/v1/access/roles'),
+    queryFn: ({ signal }) => listRoles(signal),
   });
 }
 
 export function useCreateRole() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { name: string; permissions: string[] }) =>
-      api.post<Role>('/api/v1/access/roles', body),
+    mutationFn: (body: { name: string; permissions: string[] }) => createRole(body),
     onSuccess: () => qc.invalidateQueries({ queryKey: accessKeys.roles }),
   });
 }
@@ -81,7 +68,7 @@ export function useUpdateRole() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, ...body }: { id: string; name: string; permissions: string[] }) =>
-      api.put<Role>(`/api/v1/access/roles/${id}`, body),
+      updateRole(id, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: accessKeys.roles }),
   });
 }
@@ -89,7 +76,7 @@ export function useUpdateRole() {
 export function useDeleteRole() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => api.del<void>(`/api/v1/access/roles/${id}`),
+    mutationFn: (id: string) => deleteRole(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: accessKeys.roles }),
   });
 }
@@ -97,7 +84,7 @@ export function useDeleteRole() {
 export function useMembers() {
   return useQuery({
     queryKey: accessKeys.members,
-    queryFn: () => api.get<{ members: Member[] }>('/api/v1/access/members'),
+    queryFn: ({ signal }) => listMembers(signal),
   });
 }
 
@@ -105,7 +92,7 @@ export function useSetMemberRoles() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ membershipId, roleIds }: { membershipId: string; roleIds: string[] }) =>
-      api.put<void>(`/api/v1/access/members/${membershipId}/roles`, { role_ids: roleIds }),
+      setMemberRoles(membershipId, { role_ids: roleIds }),
     onSuccess: () => qc.invalidateQueries({ queryKey: accessKeys.members }),
   });
 }
@@ -113,7 +100,7 @@ export function useSetMemberRoles() {
 export function useDesignations() {
   return useQuery({
     queryKey: accessKeys.designations,
-    queryFn: () => api.get<{ designations: Designation[] }>('/api/v1/access/designations'),
+    queryFn: ({ signal }) => listDesignations(signal),
   });
 }
 
@@ -121,7 +108,7 @@ export function useCreateDesignation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { name: string; applies_to_user_type?: string | null }) =>
-      api.post<Designation>('/api/v1/access/designations', body),
+      createDesignation({ name: body.name, applies_to_user_type: body.applies_to_user_type ?? undefined }),
     onSuccess: () => qc.invalidateQueries({ queryKey: accessKeys.designations }),
   });
 }
@@ -129,13 +116,39 @@ export function useCreateDesignation() {
 export function useTenantProfile() {
   return useQuery({
     queryKey: accessKeys.profile,
-    queryFn: () => api.get<TenantProfile>('/api/v1/access/profile'),
+    queryFn: ({ signal }) => getTenantProfile(signal),
   });
 }
 
 export function useAcademicYears() {
   return useQuery({
     queryKey: accessKeys.academicYears,
-    queryFn: () => api.get<{ academic_years: AcademicYear[] }>('/api/v1/access/academic-years'),
+    queryFn: ({ signal }) => listAcademicYears(signal),
+  });
+}
+
+// ── M11: Super-Admin Access consent ──────────────────────────────────────────
+// The tenant-owned switch that lets the platform super-admin "Login As" into this
+// school. Off by default; the control-plane impersonation endpoint 403s unless this is
+// on. Not in the frozen OpenAPI spec yet, so it uses the raw client (cf. adminApi.ts).
+export interface SuperAdminAccess {
+  allow_superadmin_access: boolean;
+}
+
+const superAdminAccessKey = ['access', 'superadmin-access'] as const;
+
+export function useSuperAdminAccess() {
+  return useQuery({
+    queryKey: superAdminAccessKey,
+    queryFn: () => api.get<SuperAdminAccess>('/api/v1/access/superadmin-access'),
+  });
+}
+
+export function useSetSuperAdminAccess() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (allow: boolean) =>
+      api.put<void>('/api/v1/access/superadmin-access', { allow_superadmin_access: allow }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: superAdminAccessKey }),
   });
 }

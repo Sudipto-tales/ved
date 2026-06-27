@@ -47,6 +47,14 @@ func Start(ctx context.Context, b *bus.Bus, pool *pgxpool.Pool) (*nats.Subscript
 		} else {
 			slog.Info("synchub: applied event", "aggregate", e.Aggregate, "op", e.Op, "tenant", e.TenantID)
 		}
+
+		// Project domain aggregates that the cloud serves directly (e.g. the Support
+		// Console reads control_plane.support_*). Projection is idempotent; on failure we
+		// DON'T ack so JetStream redelivers (e.g. a message arriving before its ticket).
+		if err := Project(ctx, pool, e); err != nil {
+			slog.Warn("synchub: projection failed (will redeliver)", "event", e.EventID, "aggregate", e.Aggregate, "err", err)
+			return
+		}
 		_ = msg.Ack()
 	})
 }

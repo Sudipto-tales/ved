@@ -1,16 +1,17 @@
 // Subdomain → tenant resolution (docs/25-subdomain-routing.md). A school is reached at
-// {slug}.ved.test / {slug}.ved.com (and {slug}-admin.… for the admin entry). When the app
+// {slug}.ved.test / {slug}.ved.com — the subdomain IS the tenant, verbatim. When the app
 // is served from such a host, the active tenant is implied by the URL — no picker — and
-// the API is same-origin (no CORS). On a bare host (localhost/IP) we fall back to the
-// legacy picker + explicit X-Tenant-ID.
+// the API is same-origin (no CORS). Everyone (admin/staff/teacher/student/guardian) signs
+// in at this one host; persona routing happens inside the app (PersonaHome → /teacher,
+// /student, …). On a bare host (localhost/IP) we fall back to the legacy picker + an
+// explicit X-Tenant-ID.
 import { env } from '@/shared/config/env';
+import { isReservedSlug } from '@/shared/tenant/reserved';
 
 const ROOTS = ['ved.test', 'ved.com'];
-const RESERVED = new Set(['platform', 'www', 'app', 'api']);
 
 export interface HostTenant {
   slug: string;
-  admin: boolean;
 }
 
 function hostname(): string {
@@ -24,9 +25,8 @@ export function hostTenant(): HostTenant | null {
     if (h === root) return null; // apex (marketing/signup)
     if (h.endsWith('.' + root)) {
       const sub = h.slice(0, h.length - root.length - 1); // strip ".ved.test"
-      if (sub.includes('.') || RESERVED.has(sub)) return null; // deeper/reserved → not a tenant
-      const admin = sub.endsWith('-admin');
-      return { slug: admin ? sub.slice(0, -'-admin'.length) : sub, admin };
+      if (sub.includes('.') || isReservedSlug(sub)) return null; // deeper/reserved → not a tenant
+      return { slug: sub };
     }
   }
   return null;

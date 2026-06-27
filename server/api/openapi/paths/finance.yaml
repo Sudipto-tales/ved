@@ -1,0 +1,305 @@
+# finance slice contract (M5) — the append-only ledger. A student's outstanding is the
+# DERIVED Σ DEBIT − Σ CREDIT the server returns, never a stored balance. Mirrors
+# internal/features/finance/finance.go.
+openapi: 3.1.0
+info:
+  title: VED finance slice
+  version: 1.0.0
+paths: {}
+
+FeeHeads:
+  get:
+    operationId: listFeeHeads
+    summary: Fee heads
+    tags: [finance]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Fee heads (RLS-scoped).
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fee_heads]
+              properties:
+                fee_heads:
+                  type: array
+                  items: { $ref: '#/schemas/FeeHead' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+  post:
+    operationId: createFeeHead
+    summary: Create a fee head
+    tags: [finance]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/schemas/FeeHeadInput' }
+    responses:
+      '201':
+        description: Created.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/IdResult' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+Invoices:
+  get:
+    operationId: listInvoices
+    summary: Recent invoices
+    tags: [finance]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Invoices.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [invoices]
+              properties:
+                invoices:
+                  type: array
+                  items: { $ref: '#/schemas/InvoiceRow' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+  post:
+    operationId: issueInvoice
+    summary: Issue an invoice (writes one DEBIT ledger entry per line)
+    tags: [finance]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/schemas/IssueInvoiceInput' }
+    responses:
+      '201':
+        description: Invoice issued.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/InvoiceResult' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+Payments:
+  get:
+    operationId: listPayments
+    summary: Recent payments
+    tags: [finance]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Payments.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [payments]
+              properties:
+                payments:
+                  type: array
+                  items: { $ref: '#/schemas/PaymentRow' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+  post:
+    operationId: recordPayment
+    summary: Record a payment (gapless receipt + CREDIT ledger entry)
+    tags: [finance]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/schemas/RecordPaymentInput' }
+    responses:
+      '201':
+        description: Payment recorded.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/PaymentResult' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+VoidPayment:
+  post:
+    operationId: voidPayment
+    summary: Void a payment (writes a REVERSAL; preserves the original row)
+    tags: [finance]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Payment id.
+        schema: { type: string, format: uuid }
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '204':
+        description: Payment voided.
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '404': { $ref: '../components/common.yaml#/components/responses/NotFound' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+StudentLedger:
+  get:
+    operationId: getStudentLedger
+    summary: Student ledger with DERIVED outstanding
+    tags: [finance]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Student id.
+        schema: { type: string, format: uuid }
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Immutable ledger entries + derived totals.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/Ledger' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+schemas:
+  IdResult:
+    type: object
+    required: [id]
+    properties:
+      id: { type: string, format: uuid }
+
+  FeeHeadInput:
+    type: object
+    required: [name, kind]
+    properties:
+      name: { type: string }
+      kind: { type: string }
+
+  FeeHead:
+    type: object
+    required: [id, name, kind]
+    properties:
+      id: { type: string, format: uuid }
+      name: { type: string }
+      kind: { type: string }
+
+  InvoiceLineInput:
+    type: object
+    required: [amount]
+    properties:
+      fee_head_id: { type: [string, 'null'], format: uuid }
+      description: { type: string }
+      amount: { type: number }
+
+  IssueInvoiceInput:
+    type: object
+    required: [student_id, lines]
+    properties:
+      student_id: { type: string, format: uuid }
+      due_date: { type: string, description: "YYYY-MM-DD" }
+      lines:
+        type: array
+        items: { $ref: '#/schemas/InvoiceLineInput' }
+
+  InvoiceResult:
+    type: object
+    required: [invoice_id]
+    properties:
+      invoice_id: { type: string, format: uuid }
+
+  InvoiceRow:
+    type: object
+    required: [id, student_id, status, issued_at, due_date]
+    properties:
+      id: { type: string, format: uuid }
+      student_id: { type: string, format: uuid }
+      status: { type: string }
+      issued_at: { type: string, format: date-time }
+      due_date: { type: [string, 'null'] }
+
+  RecordPaymentInput:
+    type: object
+    required: [student_id, amount, method]
+    properties:
+      student_id: { type: string, format: uuid }
+      amount: { type: number }
+      method: { type: string }
+
+  PaymentResult:
+    type: object
+    required: [payment_id, receipt_no]
+    properties:
+      payment_id: { type: string, format: uuid }
+      receipt_no: { type: string }
+
+  PaymentRow:
+    type: object
+    required: [id, student_id, receipt_no, amount, method, status, paid_at]
+    properties:
+      id: { type: string, format: uuid }
+      student_id: { type: string, format: uuid }
+      receipt_no: { type: string }
+      amount: { type: number }
+      method: { type: string }
+      status: { type: string }
+      paid_at: { type: string, format: date-time }
+
+  LedgerEntry:
+    type: object
+    required: [id, direction, amount, source_type]
+    properties:
+      id: { type: string, format: uuid }
+      direction: { type: string, enum: [DEBIT, CREDIT] }
+      amount: { type: number }
+      source_type: { type: string }
+      source_id: { type: [string, 'null'], format: uuid }
+      created_at: { type: string, format: date-time }
+
+  Ledger:
+    type: object
+    required: [entries, total_debit, total_credit, outstanding]
+    properties:
+      entries:
+        type: array
+        items: { $ref: '#/schemas/LedgerEntry' }
+      total_debit: { type: number }
+      total_credit: { type: number }
+      outstanding: { type: number }

@@ -5,12 +5,12 @@ import { Link } from 'react-router-dom';
 import { Badge, Card, HeroBanner, Icon, StatCard, type IconName } from '@/shared/ui';
 
 const QUICK_LINKS: { to: string; label: string; icon: IconName }[] = [
-  { to: '/portal/student/profile', label: 'My profile', icon: 'users' },
-  { to: '/portal/student/attendance', label: 'Attendance', icon: 'chart' },
-  { to: '/portal/student/marks', label: 'Marks', icon: 'book' },
-  { to: '/portal/student/timetable', label: 'Timetable', icon: 'grid' },
-  { to: '/portal/student/fees', label: 'Fees', icon: 'wallet' },
-  { to: '/portal/student/notices', label: 'Notices', icon: 'bell' },
+  { to: '/student/profile', label: 'My profile', icon: 'users' },
+  { to: '/student/attendance', label: 'Attendance', icon: 'chart' },
+  { to: '/student/marks', label: 'Marks', icon: 'book' },
+  { to: '/student/timetable', label: 'Timetable', icon: 'grid' },
+  { to: '/student/fees', label: 'Fees', icon: 'wallet' },
+  { to: '/student/notices', label: 'Notices', icon: 'bell' },
 ];
 
 export default function StudentDashboardPage() {

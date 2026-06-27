@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -43,9 +44,22 @@ import (
 
 var slugRe = regexp.MustCompile(`^[a-z][a-z0-9-]{1,30}$`)
 
+// reservedSlugs can never be a school slug — they collide with the routing namespace
+// (platform/www/api/...) or with the reserved subdomains we serve ourselves (docs/25).
+// Keep this in sync with web/src/shared/tenant/reserved.ts (the FE inline check).
+var reservedSlugs = map[string]bool{
+	"platform": true, "www": true, "app": true, "api": true, "admin": true,
+	"console": true, "ops": true, "status": true, "support": true, "help": true,
+	"docs": true, "blog": true, "mail": true, "smtp": true, "ftp": true,
+	"cdn": true, "static": true, "assets": true, "auth": true, "login": true,
+	"signup": true, "register": true, "dashboard": true, "node": true,
+	"controlplane": true, "control-plane": true, "ved": true,
+}
+
 var (
 	ErrNotFound     = errors.New("not found")
 	ErrBadSlug      = errors.New("slug must be lower-kebab (a-z, 0-9, -)")
+	ErrReservedSlug = errors.New("that slug is reserved — please choose another")
 	ErrSlugTaken    = errors.New("slug already taken")
 	ErrEmailTaken   = errors.New("admin email already registered")
 	ErrBadState     = errors.New("registration is not awaiting review")
@@ -74,6 +88,12 @@ type RegisterInput struct {
 	AdminEmail string `json:"admin_email"`
 	AdminPhone string `json:"admin_phone,omitempty"`
 	PlanID     string `json:"plan_id"`
+	// M11 KYC intake (optional at signup; the superadmin verifies during review).
+	BusinessReg string `json:"business_reg,omitempty"`
+	GST         string `json:"gst,omitempty"`
+	// M11 source tracking — where the request came from. Defaults to DIRECT/WEBSITE.
+	Source       string `json:"source,omitempty"`
+	SourceDetail string `json:"source_detail,omitempty"`
 }
 
 type ProofInput struct {
@@ -96,6 +116,10 @@ type RegistrationDTO struct {
 	ProofStatus *string    `json:"proof_status,omitempty"`
 	TenantID    *uuid.UUID `json:"tenant_id,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
+	// M11 review signals (queue columns; populated by List/Detail, not the public poll).
+	KYCStatus string `json:"kyc_status,omitempty"`
+	RiskScore string `json:"risk_score,omitempty"`
+	Source    string `json:"source,omitempty"`
 }
 
 // ApproveResult is the cross-plane handoff payload — the platform admin hands the tenant
@@ -109,6 +133,10 @@ type ApproveResult struct {
 	AdminLogin     string    `json:"admin_login"`
 	AdminTempPass  string    `json:"admin_temp_password"`
 	LicenseExpires time.Time `json:"license_expires_at"`
+	// MagicToken is the one-time activation token (M11). The platform UI turns it into a
+	// `/activate?token=…` link so the admin can one-click sign in instead of typing the
+	// temp credential. Shown ONCE, like the temp password.
+	MagicToken string `json:"magic_token,omitempty"`
 }
 
 // ---- Public flow -----------------------------------------------------------------
@@ -120,6 +148,9 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (RegistrationD
 	}
 	if !slugRe.MatchString(in.Slug) {
 		return RegistrationDTO{}, ErrBadSlug
+	}
+	if reservedSlugs[in.Slug] {
+		return RegistrationDTO{}, ErrReservedSlug
 	}
 	planID, err := uuid.Parse(in.PlanID)
 	if err != nil {
@@ -138,14 +169,21 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (RegistrationD
 		return RegistrationDTO{}, ErrSlugTaken
 	}
 
+	// M11 — triage the request before it hits the review queue.
+	score, factors := s.scoreRisk(ctx, in)
+	factorsJSON, _ := json.Marshal(factors)
+	source := normalizeSource(in.Source)
+
 	id := uuid.Must(uuid.NewV7())
 	var dto RegistrationDTO
 	err = s.pool.QueryRow(ctx,
 		`INSERT INTO control_plane.school_registration
-		   (id, school_name, slug, admin_name, admin_email, admin_phone, requested_plan_id, status)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,'ONBOARDING')
+		   (id, school_name, slug, admin_name, admin_email, admin_phone, requested_plan_id, status,
+		    kyc_business_reg, kyc_gst, risk_score, risk_factors, source, source_detail)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,'ONBOARDING',$8,$9,$10,$11,$12,$13)
 		 RETURNING id, school_name, slug, admin_name, admin_email, status, created_at`,
-		id, in.SchoolName, in.Slug, in.AdminName, in.AdminEmail, nullStr(in.AdminPhone), planID).
+		id, in.SchoolName, in.Slug, in.AdminName, in.AdminEmail, nullStr(in.AdminPhone), planID,
+		nullStr(in.BusinessReg), nullStr(in.GST), score, factorsJSON, source, nullStr(in.SourceDetail)).
 		Scan(&dto.ID, &dto.SchoolName, &dto.Slug, &dto.AdminName, &dto.AdminEmail, &dto.Status, &dto.CreatedAt)
 	if isUnique(err, "admin_email") {
 		return RegistrationDTO{}, ErrEmailTaken
@@ -154,6 +192,72 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (RegistrationD
 		return RegistrationDTO{}, err
 	}
 	return dto, nil
+}
+
+// freeEmailDomains are consumer mail providers — a business signing up from one is a
+// (weak) signal worth flagging for the reviewer, not a rejection.
+var freeEmailDomains = map[string]bool{
+	"gmail.com": true, "yahoo.com": true, "hotmail.com": true, "outlook.com": true,
+	"icloud.com": true, "aol.com": true, "proton.me": true, "protonmail.com": true,
+	"yandex.com": true, "mail.com": true, "gmx.com": true, "rediffmail.com": true,
+}
+
+// normalizeSource clamps the free-text source to the known set (defaults to DIRECT).
+func normalizeSource(s string) string {
+	switch strings.ToUpper(strings.TrimSpace(s)) {
+	case "WEBSITE":
+		return "WEBSITE"
+	case "REFERRAL":
+		return "REFERRAL"
+	case "CAMPAIGN":
+		return "CAMPAIGN"
+	default:
+		return "DIRECT"
+	}
+}
+
+// scoreRisk runs cheap heuristics at registration time and returns a LOW/MEDIUM/HIGH
+// triage plus the human-readable reasons. High-velocity bursts dominate (HIGH); softer
+// signals (free email, duplicate phone) raise it to MEDIUM. Best-effort: a query error
+// never blocks a registration, it just yields no factor.
+func (s *Service) scoreRisk(ctx context.Context, in RegisterInput) (string, []string) {
+	factors := []string{}
+	high := false
+
+	if at := strings.LastIndex(in.AdminEmail, "@"); at >= 0 {
+		domain := strings.ToLower(in.AdminEmail[at+1:])
+		if freeEmailDomains[domain] {
+			factors = append(factors, "Free email domain (not a business domain)")
+		}
+	}
+
+	// Velocity — many sign-ups in a short window is the strongest cheap fraud signal.
+	var recent int
+	if err := s.pool.QueryRow(ctx,
+		`SELECT count(*) FROM control_plane.school_registration WHERE created_at > now() - interval '1 hour'`).
+		Scan(&recent); err == nil && recent >= 5 {
+		factors = append(factors, "High registration velocity (>5 sign-ups in the last hour)")
+		high = true
+	}
+
+	// Duplicate contact phone across registrations.
+	if in.AdminPhone != "" {
+		var dup bool
+		if err := s.pool.QueryRow(ctx,
+			`SELECT EXISTS(SELECT 1 FROM control_plane.school_registration WHERE admin_phone=$1)`,
+			in.AdminPhone).Scan(&dup); err == nil && dup {
+			factors = append(factors, "Duplicate contact phone on another registration")
+		}
+	}
+
+	switch {
+	case high:
+		return "HIGH", factors
+	case len(factors) > 0:
+		return "MEDIUM", factors
+	default:
+		return "LOW", factors
+	}
 }
 
 // SubmitProof attaches a payment proof and moves the registration into the review queue.
@@ -197,6 +301,7 @@ func (s *Service) SubmitProof(ctx context.Context, regID uuid.UUID, in ProofInpu
 func (s *Service) List(ctx context.Context) ([]RegistrationDTO, error) {
 	rows, err := s.pool.Query(ctx,
 		`SELECT r.id, r.school_name, r.slug, r.admin_name, r.admin_email, r.status, r.tenant_id, r.created_at,
+		        r.kyc_status, r.risk_score, r.source,
 		        (SELECT pp.status FROM control_plane.payment_proof pp
 		          WHERE pp.registration_id = r.id ORDER BY pp.created_at DESC LIMIT 1)
 		   FROM control_plane.school_registration r
@@ -208,7 +313,8 @@ func (s *Service) List(ctx context.Context) ([]RegistrationDTO, error) {
 	out := []RegistrationDTO{}
 	for rows.Next() {
 		var d RegistrationDTO
-		if err := rows.Scan(&d.ID, &d.SchoolName, &d.Slug, &d.AdminName, &d.AdminEmail, &d.Status, &d.TenantID, &d.CreatedAt, &d.ProofStatus); err != nil {
+		if err := rows.Scan(&d.ID, &d.SchoolName, &d.Slug, &d.AdminName, &d.AdminEmail, &d.Status, &d.TenantID, &d.CreatedAt,
+			&d.KYCStatus, &d.RiskScore, &d.Source, &d.ProofStatus); err != nil {
 			return nil, err
 		}
 		out = append(out, d)
@@ -221,6 +327,20 @@ func (s *Service) List(ctx context.Context) ([]RegistrationDTO, error) {
 type RegistrationDetail struct {
 	Registration RegistrationDTO `json:"registration"`
 	Proof        *ProofDTO       `json:"proof,omitempty"`
+	KYC          KYCDetail       `json:"kyc"`
+}
+
+// KYCDetail is the full review payload behind the registration-detail page (M11):
+// the KYC documents/status plus the computed risk factors and source attribution.
+type KYCDetail struct {
+	Status       string   `json:"status"`
+	BusinessReg  *string  `json:"business_reg,omitempty"`
+	GST          *string  `json:"gst,omitempty"`
+	Notes        *string  `json:"notes,omitempty"`
+	RiskScore    string   `json:"risk_score"`
+	RiskFactors  []string `json:"risk_factors"`
+	Source       string   `json:"source"`
+	SourceDetail *string  `json:"source_detail,omitempty"`
 }
 
 // ProofDTO is a payment proof as the review queue / proof detail pages display it.
@@ -246,18 +366,26 @@ type ProofDTO struct {
 func (s *Service) Detail(ctx context.Context, regID uuid.UUID) (RegistrationDetail, error) {
 	var out RegistrationDetail
 	d := &out.Registration
+	k := &out.KYC
+	var factorsRaw []byte
 	err := s.pool.QueryRow(ctx,
 		`SELECT id, school_name, slug, admin_name, admin_email, status, tenant_id, created_at,
+		        kyc_status, kyc_business_reg, kyc_gst, kyc_notes, risk_score, risk_factors, source, source_detail,
 		        (SELECT pp.status FROM control_plane.payment_proof pp
 		          WHERE pp.registration_id = school_registration.id ORDER BY pp.created_at DESC LIMIT 1)
 		   FROM control_plane.school_registration WHERE id=$1`, regID).
-		Scan(&d.ID, &d.SchoolName, &d.Slug, &d.AdminName, &d.AdminEmail, &d.Status, &d.TenantID, &d.CreatedAt, &d.ProofStatus)
+		Scan(&d.ID, &d.SchoolName, &d.Slug, &d.AdminName, &d.AdminEmail, &d.Status, &d.TenantID, &d.CreatedAt,
+			&k.Status, &k.BusinessReg, &k.GST, &k.Notes, &k.RiskScore, &factorsRaw, &k.Source, &k.SourceDetail, &d.ProofStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return RegistrationDetail{}, ErrNotFound
 	}
 	if err != nil {
 		return RegistrationDetail{}, err
 	}
+	// Mirror the queue signals onto the registration DTO, and decode risk factors.
+	d.KYCStatus, d.RiskScore, d.Source = k.Status, k.RiskScore, k.Source
+	k.RiskFactors = []string{}
+	_ = json.Unmarshal(factorsRaw, &k.RiskFactors)
 
 	var p ProofDTO
 	err = s.pool.QueryRow(ctx,
@@ -380,12 +508,15 @@ func (s *Service) Approve(ctx context.Context, adminID, regID uuid.UUID) (Approv
 			return fmt.Errorf("create tenant: %w", err)
 		}
 
-		// 3. Subscription (active, period set).
+		// 3. Subscription (active, period set). Pin the plan's LATEST version so a future
+		// price change leaves this subscriber grandfathered (M11 Slice D).
 		subID := uuid.Must(uuid.NewV7())
 		if _, err := tx.Exec(ctx,
 			`INSERT INTO control_plane.subscription
-			   (id, tenant_id, plan_id, status, billing_cycle, current_period_start, current_period_end, seats)
-			 VALUES ($1,$2,$3,'ACTIVE',$4,$5,$6,$7)`,
+			   (id, tenant_id, plan_id, plan_version_id, status, billing_cycle, current_period_start, current_period_end, seats)
+			 VALUES ($1,$2,$3,
+			         (SELECT id FROM control_plane.plan_version WHERE plan_id=$3 ORDER BY version DESC LIMIT 1),
+			         'ACTIVE',$4,$5,$6,$7)`,
 			subID, tenantID, planID, cycle, now, periodEnd, seats); err != nil {
 			return fmt.Errorf("create subscription: %w", err)
 		}
@@ -450,18 +581,19 @@ func (s *Service) Approve(ctx context.Context, adminID, regID uuid.UUID) (Approv
 	}
 
 	// 8. Cross-plane handoff: provision the tenant plane (separate schema, own txs).
-	login, tempPass, err := provisionTenantPlane(ctx, s.pool, s.nodeID, res.TenantID, res.Slug, adminName, adminEmail)
+	login, tempPass, magicToken, err := provisionTenantPlane(ctx, s.pool, s.nodeID, res.TenantID, res.Slug, adminName, adminEmail)
 	if err != nil {
 		return ApproveResult{}, fmt.Errorf("tenant provisioning failed (platform records committed): %w", err)
 	}
 	res.AdminLogin = login
 	res.AdminTempPass = tempPass
+	res.MagicToken = magicToken
 	return res, nil
 }
 
 // ---- Cross-plane provisioning (writes the tenant `public` schema) -----------------
 
-func provisionTenantPlane(ctx context.Context, pool *pgxpool.Pool, nodeID, tenantID uuid.UUID, slug, adminName, adminRealEmail string) (login, tempPass string, err error) {
+func provisionTenantPlane(ctx context.Context, pool *pgxpool.Pool, nodeID, tenantID uuid.UUID, slug, adminName, adminRealEmail string) (login, tempPass, magicToken string, err error) {
 	// Generate the tenant admin's login handle (EMPLOYEE) — globally unique vs public.users.
 	handle, err := credential.GenerateHandle(adminName, "EMPLOYEE", slug, func(candidate string) (bool, error) {
 		var exists bool
@@ -469,19 +601,26 @@ func provisionTenantPlane(ctx context.Context, pool *pgxpool.Pool, nodeID, tenan
 		return exists, e
 	})
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	tempPass, err = credential.TempPassword()
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	hash, err := crypto.HashPassword(tempPass)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
+	}
+	// One-time magic-login token (M11): only the hash is stored; the raw value goes back in
+	// the ApproveResult for the platform UI to turn into an `/activate?token=…` link.
+	magicRaw, magicHash, err := credential.ActivationToken()
+	if err != nil {
+		return "", "", "", err
 	}
 
 	userID := uuid.Must(uuid.NewV7())
 	membershipID := uuid.Must(uuid.NewV7())
+	activationID := uuid.Must(uuid.NewV7())
 	hlc := strconv.FormatInt(time.Now().UnixNano(), 10)
 
 	// First admin: user + membership (EMPLOYEE) in one tenant tx (golden rule).
@@ -505,32 +644,57 @@ func provisionTenantPlane(ctx context.Context, pool *pgxpool.Pool, nodeID, tenan
 			uuid.Must(uuid.NewV7()), tenantID, membershipID, payload, hlc, nodeID); err != nil {
 			return err
 		}
-		_, err := tx.Exec(ctx,
+		if _, err := tx.Exec(ctx,
 			`INSERT INTO audit_log (id, tenant_id, action, resource_type, resource_id, after, origin_node_id)
 			 VALUES ($1,$2,'membership.create','membership',$3,$4,$5)`,
-			uuid.Must(uuid.NewV7()), tenantID, membershipID, payload, nodeID)
+			uuid.Must(uuid.NewV7()), tenantID, membershipID, payload, nodeID); err != nil {
+			return err
+		}
+		// Magic-login activation token (72h), with its own outbox + audit (golden rule).
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO activation_token (id, tenant_id, user_id, token_hash, expires_at, hlc, version, origin_node_id)
+			 VALUES ($1,$2,$3,$4, now() + interval '72 hours', $5, 1, $6)`,
+			activationID, tenantID, userID, magicHash, hlc, nodeID); err != nil {
+			return fmt.Errorf("insert activation token: %w", err)
+		}
+		actPayload, _ := json.Marshal(map[string]any{"activation_id": activationID, "user_id": userID})
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO outbox (id, tenant_id, aggregate, aggregate_id, op, payload, hlc, origin_node_id)
+			 VALUES ($1,$2,'activation_token',$3,'CREATE',$4,$5,$6)`,
+			uuid.Must(uuid.NewV7()), tenantID, activationID, actPayload, hlc, nodeID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx,
+			`INSERT INTO audit_log (id, tenant_id, action, resource_type, resource_id, after, origin_node_id)
+			 VALUES ($1,$2,'activation.create','activation_token',$3,$4,$5)`,
+			uuid.Must(uuid.NewV7()), tenantID, activationID, actPayload, nodeID)
 		return err
 	}); err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 
 	// RBAC bootstrap (default roles + attach School Admin) and tenant profile (slug).
 	accessRepo := access.NewRepo(pool, nodeID)
 	if err := access.SeedCatalog(ctx, accessRepo); err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	if err := access.BootstrapTenant(ctx, accessRepo, tenantID, membershipID); err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	if err := students.SeedTenantProfile(ctx, students.NewRepo(pool, nodeID), tenantID, slug, adminName+"'s School"); err != nil {
-		return "", "", err
+		return "", "", "", err
+	}
+	// Default onboarding templates + dropdown lists so the school's people forms work
+	// out of the box and are immediately customizable (M10).
+	if err := access.SeedTenantSetup(ctx, accessRepo, tenantID); err != nil {
+		return "", "", "", err
 	}
 	// Every provisioned school needs a current academic year before it can create
 	// sections/exams (full tenant-setup — terms/rooms/multiple years — comes later).
 	if err := academics.SeedDefaultAcademicYear(ctx, onboarding.NewEngine(pool, nodeID), tenantID); err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
-	return handle, tempPass, nil
+	return handle, tempPass, magicRaw, nil
 }
 
 // ---- HTTP ------------------------------------------------------------------------
@@ -819,10 +983,12 @@ func writeErr(w http.ResponseWriter, err error) {
 		httpx.Error(w, http.StatusNotFound, "not found")
 	case errors.Is(err, ErrBadSlug), errors.Is(err, ErrInvalidInput):
 		httpx.Error(w, http.StatusBadRequest, err.Error())
-	case errors.Is(err, ErrSlugTaken), errors.Is(err, ErrEmailTaken):
+	case errors.Is(err, ErrSlugTaken), errors.Is(err, ErrReservedSlug), errors.Is(err, ErrEmailTaken):
 		httpx.Error(w, http.StatusConflict, err.Error())
 	case errors.Is(err, ErrBadState), errors.Is(err, ErrNoProof):
 		httpx.Error(w, http.StatusUnprocessableEntity, err.Error())
+	case errors.Is(err, ErrConsentRequired):
+		httpx.Error(w, http.StatusForbidden, err.Error())
 	default:
 		httpx.Error(w, http.StatusInternalServerError, err.Error())
 	}

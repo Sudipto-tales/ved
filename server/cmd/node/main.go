@@ -12,19 +12,23 @@ import (
 
 	"github.com/weloin/ved/internal/features/academics"
 	"github.com/weloin/ved/internal/features/access"
+	"github.com/weloin/ved/internal/features/configsync"
 	"github.com/weloin/ved/internal/features/finance"
 	"github.com/weloin/ved/internal/features/guardian"
 	"github.com/weloin/ved/internal/features/health"
 	"github.com/weloin/ved/internal/features/identity"
 	"github.com/weloin/ved/internal/features/learning"
+	"github.com/weloin/ved/internal/features/search"
 	"github.com/weloin/ved/internal/features/staff"
 	"github.com/weloin/ved/internal/features/students"
+	"github.com/weloin/ved/internal/features/support"
 	"github.com/weloin/ved/internal/features/teachers"
 	"github.com/weloin/ved/internal/platform/auth"
 	"github.com/weloin/ved/internal/platform/authz"
 	"github.com/weloin/ved/internal/platform/bus"
 	"github.com/weloin/ved/internal/platform/config"
 	"github.com/weloin/ved/internal/platform/db"
+	"github.com/weloin/ved/internal/platform/hlc"
 	"github.com/weloin/ved/internal/platform/httpx"
 	"github.com/weloin/ved/internal/platform/migrate"
 	"github.com/weloin/ved/internal/platform/onboarding"
@@ -38,6 +42,9 @@ func main() {
 	// nodeID identifies this node for sync metadata (origin_node_id). Provisioning
 	// will assign a stable one at M6; for now it's per-process.
 	nodeID := uuid.Must(uuid.NewV7())
+	// Bind the process-global HLC to this node so every write is causally stamped and
+	// sync stamps compare correctly across nodes (docs/08 pillar 5).
+	hlc.SetNode(nodeID)
 
 	slog.Info("running migrations")
 	if err := migrate.Up(ctx, cfg.DatabaseURL); err != nil {
@@ -87,6 +94,10 @@ func main() {
 		if err := academics.SeedDefaultAcademicYear(ctx, onboarding.NewEngine(pool, nodeID), devTenant); err != nil {
 			slog.Error("seed academic year", "err", err)
 		}
+		// Default onboarding templates + dropdown lists (M10), idempotent.
+		if err := access.SeedTenantSetup(ctx, accessRepo, devTenant); err != nil {
+			slog.Error("seed tenant setup", "err", err)
+		}
 	}
 
 	// Sync (M6): relay the transactional outbox to JetStream. Tolerant of NATS being
@@ -106,6 +117,13 @@ func main() {
 			defer relayPool.Close()
 			go syncrelay.NewRelay(relayPool, b).Run(ctx)
 			slog.Info("sync relay started", "nats", cfg.NATSURL)
+		}
+		// Cloud→node config push-down (M6): apply license/tenant-config snapshots the
+		// control plane pushes. Uses the RLS-scoped app pool; idempotent via the inbox.
+		if _, err := configsync.Start(ctx, b, pool, configsync.DefaultRegistry); err != nil {
+			slog.Warn("config sync start", "err", err)
+		} else {
+			slog.Info("config sync consumer started", "nats", cfg.NATSURL)
 		}
 	}
 
@@ -144,6 +162,8 @@ func main() {
 		finance.Register(g, pool, nodeID, resolver)
 		guardian.Register(g, pool, nodeID, resolver)
 		learning.Register(g, pool, nodeID, resolver)
+		search.Register(g, pool, nodeID, resolver)
+		support.Register(g, pool, nodeID, resolver)
 	})
 
 	if err := httpx.Serve(cfg.HTTPAddr, r); err != nil {

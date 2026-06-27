@@ -70,6 +70,34 @@ func TestTempPasswordLengthAndAlphabet(t *testing.T) {
 	}
 }
 
+func TestActivationToken(t *testing.T) {
+	raw1, hash1, err := ActivationToken()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if raw1 == "" || hash1 == "" {
+		t.Fatal("expected non-empty token and hash")
+	}
+	// The persisted hash is exactly HashToken(raw) — and it is NOT the raw value.
+	if HashToken(raw1) != hash1 {
+		t.Fatal("hash must equal HashToken(raw)")
+	}
+	if hash1 == raw1 {
+		t.Fatal("hash must not equal the raw token")
+	}
+	if len(hash1) != 64 {
+		t.Fatalf("expected hex sha-256 (64 chars), got %d", len(hash1))
+	}
+	// HashToken is deterministic; two fresh tokens differ.
+	if HashToken(raw1) != HashToken(raw1) {
+		t.Fatal("HashToken must be deterministic")
+	}
+	raw2, _, _ := ActivationToken()
+	if raw2 == raw1 {
+		t.Fatal("two activation tokens must differ")
+	}
+}
+
 func contains(s string, c byte) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] == c {

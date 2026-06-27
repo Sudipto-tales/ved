@@ -1,0 +1,98 @@
+# Shared OpenAPI components reused by every slice spec (bridges.md §1).
+# Referenced from the root openapi.yaml and each paths/<slice>.yaml via relative $ref.
+# Not a standalone API document — only a component library.
+openapi: 3.1.0
+info:
+  title: VED shared components
+  version: 1.0.0
+paths: {}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Access JWT issued by /auth/login. Carries sub=user_id and the user's
+        memberships (bridges.md §2). The active tenant and permissions are
+        resolved downstream, not from the token.
+
+  parameters:
+    TenantIdHeader:
+      name: X-Tenant-ID
+      in: header
+      required: false
+      description: >
+        Active tenant id (UUID). Used on a bare host (e.g. localhost). On a
+        {slug}.ved.* subdomain the client sends X-Tenant-Slug instead and this
+        is resolved server-side (docs/25). Exactly one of the two is expected.
+      schema:
+        type: string
+        format: uuid
+    TenantSlugHeader:
+      name: X-Tenant-Slug
+      in: header
+      required: false
+      description: >
+        Tenant subdomain slug (e.g. "lincoln"). Resolved to a tenant_id by the
+        tenant-context middleware. Alternative to X-Tenant-ID.
+      schema:
+        type: string
+
+  schemas:
+    Error:
+      type: object
+      description: The uniform error envelope written by httpx.Error.
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable error message.
+      examples:
+        - { error: "missing permission: student.onboard" }
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid access token (no/!Bearer JWT).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example: { error: "unauthorized" }
+    Forbidden:
+      description: >
+        Authenticated but the membership's effective permissions do not include
+        the required permission (authz.Require), or the active tenant is not in
+        the caller's memberships.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example: { error: "missing permission: student.onboard" }
+    BadRequest:
+      description: Malformed body, invalid path param, or failed domain validation.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example: { error: "invalid JSON body" }
+    NotFound:
+      description: The addressed resource does not exist in this tenant.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example: { error: "not found" }
+    Conflict:
+      description: A uniqueness or state-machine invariant was violated.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example: { error: "admission number already exists" }
+    Internal:
+      description: Unexpected server error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'

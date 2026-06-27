@@ -34,12 +34,21 @@ school_registration  (control-plane)
   requested_plan_id?  → plan_catalog   -- plan picked during onboarding
   reject_reason?      -- set on REJECTED
   tenant_id?          → tenant         -- set once provisioned (ACTIVE)
+  -- M11 review signals (docs/promts.md):
+  kyc_status ∈ {PENDING, VERIFIED, REJECTED}   -- superadmin-set during review
+  kyc_business_reg?, kyc_gst?, kyc_notes?       -- KYC documents
+  kyc_reviewed_by? → platform_admin, kyc_reviewed_at?
+  risk_score ∈ {LOW, MEDIUM, HIGH}              -- auto-triaged at register
+  risk_factors        -- JSON: human-readable reasons behind the score
+  source ∈ {WEBSITE, REFERRAL, CAMPAIGN, DIRECT}, source_detail?
   created_at, updated_at
 ```
 
 `ADMIN_REGISTERED → ONBOARDING → PENDING_PAYMENT_REVIEW → ACTIVE`; superadmin may
 `REJECT(reason)` or later `SUSPEND`. Recurring renewals reuse this transition via
-[11](../11-subscription-billing.md).
+[11](../11-subscription-billing.md). The M11 KYC/risk/source columns are **review
+metadata** — they inform the decision but do not themselves advance the state machine
+(approve/reject still do).
 
 ## Tenant directory
 
@@ -73,8 +82,28 @@ plan_catalog  (control-plane)
   seats           -- max_students / max_staff limit
   enabled_modules -- JSON: entitlement/feature keys this plan grants
   is_active
+  annual_price    -- M9: headline annual price (rolls forward on a new version)
+  status ∈ {ACTIVE, ARCHIVED}   -- M9: archive hides from the public catalog
   created_at, updated_at
 ```
+
+**Plan versioning (M11, grandfathered pricing).** A price change does not overwrite the
+plan — it appends a `plan_version`, and a `subscription` **pins** the version it bought, so
+existing subscribers keep their price while new ones bind to the latest.
+
+```
+plan_version  (control-plane)            -- immutable price-point chain
+  id              UUIDv7 PK
+  plan_id         → plan_catalog
+  version         -- 1,2,3… (UNIQUE per plan)
+  monthly_price, annual_price, currency
+  effective_date
+  status ∈ {ACTIVE, RETIRED}
+  created_at
+```
+
+The plan_catalog headline `price`/`annual_price` rolls forward to the newest version; the
+older versions live on for grandfathered subscribers. See [promts.md](../promts.md).
 
 ## Subscription
 
@@ -95,6 +124,10 @@ subscription  (control-plane)
   seats
   grace_until?
   cancelled_at?
+  plan_version_id?      → plan_version  -- M11: the pinned price version (grandfathering)
+  autopay_enabled       -- M11: recurring-payment opt-in
+  autopay_last_status?  ∈ {SUCCESS, FAILED}   -- M11: last attempt outcome
+  autopay_failed_count  -- M11: consecutive failures
   created_at, updated_at
 ```
 
@@ -162,8 +195,34 @@ license  (control-plane)
   expires_at
   grace_days
   revoked
+  -- M9 lifecycle state machine:
+  status ∈ {ACTIVE, SUSPENDED, EXPIRED, CANCELLED, TRIAL}
+  auto_renew, cancel_at_period_end, cancelled_at?
+  superseded_by?  → license   -- extend/change-plan re-signs a fresh row, superseding this one
   created_at, updated_at
 ```
+
+## Platform audit (M11)
+
+A minimal append-only trail for sensitive superadmin actions — first used by "Login As
+Tenant" impersonation, which must be traceable to the admin, tenant, and time. Plain
+control-plane table (no tenant_id/RLS).
+
+```
+cp_audit_log  (control-plane)
+  id          UUIDv7 PK
+  admin_id?   → platform_admin
+  action      -- e.g. 'tenant.login_as'
+  target_type, target_id?
+  detail      -- JSON context (slug, target login, …)
+  created_at
+```
+
+> **Login-As consent lives in the TENANT plane**, not here: `tenant_profile
+> .allow_superadmin_access` (the school controls it). The control plane only reads it
+> before minting a short-lived impersonation token. See
+> [24 §5](../24-login-and-registration.md) and the magic-link `activation_token`
+> (tenant-plane) in the same section.
 
 ---
 

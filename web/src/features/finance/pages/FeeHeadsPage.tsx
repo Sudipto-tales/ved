@@ -56,6 +56,8 @@ export default function FeeHeadsPage() {
           rows={heads}
           rowKey={(r) => r.id}
           empty="No fee heads yet. Add your first above."
+          searchable
+          searchText={(r) => `${r.name} ${r.kind}`}
           columns={[
             { header: 'Name', cell: (r) => <span style={{ fontWeight: 600 }}>{r.name}</span> },
             { header: 'Kind', cell: (r) => <Badge tone={r.kind === 'RECURRING' ? 'primary' : 'neutral'}>{r.kind}</Badge> },

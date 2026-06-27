@@ -100,6 +100,8 @@ export default function DesignationsPage() {
           rows={list.data?.designations ?? []}
           rowKey={(d) => d.id}
           loading={list.isLoading}
+          searchable
+          searchText={(d) => d.name}
           empty={list.error ? 'Failed to load designations.' : 'No designations yet.'}
         />
       </Card>

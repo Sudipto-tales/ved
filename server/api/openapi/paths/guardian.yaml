@@ -1,0 +1,290 @@
+# guardian portal contract (M7). A child-scoped projection over students/academics/finance
+# — the portal owns no tables. Every read is restricted to the caller's guardian_student
+# set (query layer) AND RLS. Mirrors internal/features/guardian/guardian.go.
+openapi: 3.1.0
+info:
+  title: VED guardian slice
+  version: 1.0.0
+paths: {}
+
+Children:
+  get:
+    operationId: listChildren
+    summary: The guardian's linked children
+    tags: [guardian]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    responses:
+      '200':
+        description: Linked children.
+        content:
+          application/json:
+            schema: { type: object, required: [children], properties: { children: { type: array, items: { $ref: '#/schemas/Child' } } } }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+ChildAttendance:
+  get:
+    operationId: getChildAttendance
+    summary: A child's attendance summary (must be a linked child)
+    tags: [guardian]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: childId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    responses:
+      '200':
+        description: Attendance summary (summed counts). A foreign child → 403.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [summary]
+              properties:
+                summary: { type: object, additionalProperties: { type: integer } }
+                note: { type: string }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+GuardianExams:
+  get:
+    operationId: listGuardianExams
+    summary: Exams visible to the guardian (for marks lookups)
+    tags: [guardian]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    responses:
+      '200':
+        description: Exams.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [exams]
+              properties:
+                exams: { type: array, items: { $ref: '#/schemas/GuardianExam' } }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+ChildMarks:
+  get:
+    operationId: getChildMarks
+    summary: A child's marks for an exam (must be a linked child)
+    tags: [guardian]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: childId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { name: exam_id, in: query, required: false, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    responses:
+      '200':
+        description: Child marks. A foreign child → 403.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [marks]
+              properties:
+                marks: { type: array, items: { $ref: '#/schemas/ChildMark' } }
+                note: { type: string }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+ChildFees:
+  get:
+    operationId: getChildFees
+    summary: A child's fee ledger (must be a linked child; guardian.read_fees)
+    tags: [guardian]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: childId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    responses:
+      '200':
+        description: The child's ledger with derived outstanding. A foreign child → 403.
+        content:
+          application/json:
+            schema: { $ref: './finance.yaml#/schemas/Ledger' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+PayFees:
+  post:
+    operationId: payChildFees
+    summary: Simulated online fee payment for a child (guardian.pay_fees + can_pay)
+    tags: [guardian]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: childId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/schemas/PayInput' }
+    responses:
+      '201':
+        description: Payment recorded (gapless receipt + CREDIT in the ledger).
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [payment_id, receipt_no]
+              properties:
+                payment_id: { type: string, format: uuid }
+                receipt_no: { type: string }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+RequestLeave:
+  post:
+    operationId: requestChildLeave
+    summary: Raise a child-absence request (guardian.request_leave); a teacher decides
+    tags: [guardian]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: childId, in: path, required: true, schema: { type: string, format: uuid } }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }
+      - { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/schemas/LeaveInput' }
+    responses:
+      '201':
+        description: Leave request created (PENDING).
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [leave_request_id]
+              properties: { leave_request_id: { type: string, format: uuid } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+MyLeaveRequests:
+  get:
+    operationId: listMyLeaveRequests
+    summary: The caller-guardian's own leave-request history
+    tags: [guardian]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    responses:
+      '200':
+        description: Leave requests.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [leave_requests]
+              properties:
+                leave_requests: { type: array, items: { $ref: '#/schemas/LeaveRequest' } }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+UpdateOwnContact:
+  post:
+    operationId: requestContactChange
+    summary: Propose new contact details for the guardian's own record (maker-checker)
+    tags: [guardian]
+    security: [{ bearerAuth: [] }]
+    parameters: [{ $ref: '../components/common.yaml#/components/parameters/TenantIdHeader' }, { $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader' }]
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/schemas/ContactInput' }
+    responses:
+      '201':
+        description: Contact-change request created (PENDING).
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contact_change_request_id]
+              properties: { contact_change_request_id: { type: string, format: uuid } }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '403': { $ref: '../components/common.yaml#/components/responses/Forbidden' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+schemas:
+  PayInput:
+    type: object
+    required: [amount]
+    properties:
+      amount: { type: number, minimum: 1 }
+      method: { type: string }
+
+  LeaveInput:
+    type: object
+    required: [from_date, to_date, reason]
+    properties:
+      from_date: { type: string, format: date }
+      to_date: { type: string, format: date }
+      reason: { type: string }
+
+  ContactInput:
+    type: object
+    properties:
+      phone: { type: string }
+      email: { type: string }
+      address: {}
+
+  LeaveRequest:
+    type: object
+    required: [id, student_id, student_name, from_date, to_date, reason, status, created_at]
+    properties:
+      id: { type: string, format: uuid }
+      student_id: { type: string, format: uuid }
+      student_name: { type: string }
+      from_date: { type: string, format: date }
+      to_date: { type: string, format: date }
+      reason: { type: string }
+      status: { type: string }
+      created_at: { type: string, format: date-time }
+
+  Child:
+    type: object
+    required: [student_id, name, admission_no, relation, is_primary, can_pay]
+    properties:
+      student_id: { type: string, format: uuid }
+      name: { type: string }
+      admission_no: { type: string }
+      relation: { type: string }
+      is_primary: { type: boolean }
+      can_pay: { type: boolean }
+
+  GuardianExam:
+    type: object
+    required: [id, name]
+    properties:
+      id: { type: string, format: uuid }
+      name: { type: string }
+      max_marks: { type: number }
+
+  ChildMark:
+    type: object
+    required: [subject_id, marks]
+    properties:
+      subject_id: { type: string, format: uuid }
+      marks: { type: number }
+      subject_name: { type: string }

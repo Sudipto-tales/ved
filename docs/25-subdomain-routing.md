@@ -21,14 +21,35 @@ data is isolated by `tenant_id` + RLS, not by port or process. Spinning up a Vit
 
 | Audience | Local | Production |
 |---|---|---|
-| Everyone in a school (student/teacher/guardian/staff) | `{slug}.ved.test` | `{slug}.ved.com` |
-| School admin | `{slug}-admin.ved.test` | `{slug}-admin.ved.com` |
+| Everyone in a school (admin/staff/teacher/student/guardian) | `{slug}.ved.test` | `{slug}.ved.com` |
 | Platform superadmin | `platform.ved.test` | `platform.ved.com` |
 | Marketing + self-signup | `ved.test` (apex) | `www.ved.com` |
 
 `{slug}` is the school's immutable tenant slug (e.g. `lincoln`). A single wildcard cert
-`*.ved.com` covers both `lincoln.ved.com` and `lincoln-admin.ved.com` (both one label
-deep) — no per-tenant certificates.
+`*.ved.com` covers every school (one label deep) — no per-tenant certificates.
+
+**One door per school.** Everyone — admin, accountant, teacher, student, guardian — signs
+in at the **same** `{slug}.ved.com`. There is no `-admin` subdomain and no `/admin` URL: the
+*role* decides the experience, not the address. This matches the familiar SaaS shape
+(Slack/Notion/Linear): one hostname, one mental model, nothing to fat-finger.
+
+**Persona routing (inside the app).** After login, `PersonaHome` redirects by the
+membership's `user_type`:
+
+| `user_type` | Lands on | Notes |
+|---|---|---|
+| `EMPLOYEE` (admin / accountant / clerk) | `/` — the management app | Sidebar is permission-filtered (`<Can>`): an admin sees everything, an accountant sees only Finance. |
+| `TEACHER` | `/teacher` | Teacher portal (own classes, attendance, marks). |
+| `STUDENT` | `/student` | Student self-service portal. |
+| `GUARDIAN` | `/guardian` | Child-scoped portal. |
+
+Guards layer (defence in depth, server is the real fence): `AuthGuard` (logged in?) →
+`PersonaGuard` (right `user_type` for this area? else bounced to their own home) →
+`PermissionGuard` / `<Can>` (has the RBAC permission?). See `web/src/app/`.
+
+**Reserved slugs.** A school slug can never be one of the routing-namespace names
+(`platform`, `www`, `api`, `admin`, `app`, `console`, …). Signup rejects them
+(`reservedSlugs` in `registration.go`, mirrored in `web/src/shared/tenant/reserved.ts`).
 
 ## 3. Request flow
 
@@ -54,9 +75,9 @@ Because the subdomain *is* the tenant:
   the app operates in that tenant; if the user has no membership there, API calls return
   403 → "no access".
 - A multi-school person visits each school's subdomain.
-- `lincoln-admin.ved.test` → the **same** bundle, an "admin" entry (branding/landing); a
-  non-admin who signs in is bounced. (The app already routes by `user_type`, so the admin
-  subdomain is a focused door, not a separate build.)
+- After auth the app routes by `user_type` (admin/staff → `/`; teacher → `/teacher`;
+  student → `/student`; guardian → `/guardian`) and the sidebar is filtered by permission —
+  one bundle, no per-persona subdomain or build.
 - `platform.ved.test` → the platform SPA (superadmin, separate namespace).
 
 ## 5. How tenant is resolved (the contract)
@@ -81,12 +102,14 @@ address=/ved.test/127.0.0.1
 Minimal alternative (no dnsmasq) — add explicit hosts entries per school:
 ```
 # /etc/hosts
-127.0.0.1  lincoln.ved.test  lincoln-admin.ved.test  maple.ved.test  platform.ved.test
+127.0.0.1  ved.test  lincoln.ved.test  maple.ved.test  platform.ved.test
 ```
 **nginx** (committed at `deploy/nginx/ved.test.conf`) reverse-proxies to the existing dev
 servers — tenant subdomains → the tenant SPA + node API; `platform.` → the platform SPA +
-control plane. In dev it's run as a container (`./ved.sh up` includes it); it proxies to
-`web:5173`, `node:8081` (container port), `controlplane:8080` on the compose network.
+control plane; the **apex `ved.test`** → the platform SPA's **public marketing landing +
+signup** (same bundle, opens on `/`). In dev it's run as a container (`./ved.sh up` includes
+it); it proxies to `web:5173`, `node:8091` (container port), `controlplane:8080`,
+`platform-web:5174` on the compose network.
 
 ## 7. Production (`*.ved.com`)
 
@@ -100,10 +123,12 @@ control plane. In dev it's run as a container (`./ved.sh up` includes it); it pr
 - **DB:** migration `00011` — `tenant_id_by_slug(text)` SECURITY DEFINER, `EXECUTE` to `ved_app`.
 - **Backend:** `httpx.TenantContext(resolve)` resolves `X-Tenant-Slug`→id (or `X-Tenant-ID`),
   then the existing membership authorisation; `cmd/node` wires the resolver over the pool.
-- **Frontend:** `shared/tenant/host.ts` derives `{slug, admin}` from the hostname and the
-  API base (relative on `*.ved.test`/`*.ved.com`); the API client sends `X-Tenant-Slug`;
+- **Frontend:** `shared/tenant/host.ts` derives `{slug}` from the hostname and the API base
+  (relative on `*.ved.test`/`*.ved.com`); the API client sends `X-Tenant-Slug`;
   `TenantProvider`/`TenantGuard` treat a subdomain as an active tenant (no picker);
   `useAuthFlow` skips the picker in subdomain mode; the login page shows the school.
+  Persona routing: `app/PersonaHome.tsx` + `app/guards/PersonaGuard.tsx`. Reserved-slug
+  list: `shared/tenant/reserved.ts`.
 - **Infra:** `deploy/nginx/ved.test.conf`, dnsmasq snippet, an `nginx` compose service.
 
 ## Cross-references

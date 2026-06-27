@@ -16,6 +16,7 @@ import { accessPages } from '@/features/access/routes';
 import { adminPages } from '@/features/admin/routes';
 import { communicationPages } from '@/features/communication/routes';
 import { reportsPages } from '@/features/reports/routes';
+import { supportPages } from '@/features/support/routes';
 import { helpPages } from '@/features/help/routes';
 
 export const allPages: PageDef[] = [
@@ -33,6 +34,7 @@ export const allPages: PageDef[] = [
   ...adminPages,
   ...communicationPages,
   ...reportsPages,
+  ...supportPages,
 ];
 
 export const publicPages = allPages.filter((p) => p.persona === 'PUBLIC');

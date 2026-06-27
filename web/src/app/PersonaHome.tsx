@@ -7,8 +7,8 @@ import { useTenant } from '@/shared/tenant/TenantProvider';
 import DashboardPage from '@/features/dashboard/DashboardPage';
 
 const HOME_FOR: Record<string, string> = {
-  TEACHER: '/portal/teacher',
-  STUDENT: '/portal/student',
+  TEACHER: '/teacher',
+  STUDENT: '/student',
   GUARDIAN: '/guardian',
 };
 

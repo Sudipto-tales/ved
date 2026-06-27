@@ -63,7 +63,7 @@ export const studentsPages: PageDef[] = [
 
   // --- STUDENT: self-service portal (identity-scoped, no permission gate) ---
   {
-    path: 'portal/student',
+    path: 'student',
     title: 'Dashboard',
     persona: 'STUDENT',
     tier: 'T1',
@@ -72,7 +72,7 @@ export const studentsPages: PageDef[] = [
     element: () => import('./pages/portal/StudentDashboardPage'),
   },
   {
-    path: 'portal/student/profile',
+    path: 'student/profile',
     title: 'My profile',
     persona: 'STUDENT',
     tier: 'T1',
@@ -81,7 +81,7 @@ export const studentsPages: PageDef[] = [
     element: () => import('./pages/portal/StudentProfilePage'),
   },
   {
-    path: 'portal/student/attendance',
+    path: 'student/attendance',
     title: 'My attendance',
     persona: 'STUDENT',
     tier: 'T1',
@@ -90,7 +90,7 @@ export const studentsPages: PageDef[] = [
     element: () => import('./pages/portal/StudentAttendancePage'),
   },
   {
-    path: 'portal/student/marks',
+    path: 'student/marks',
     title: 'My marks / report card',
     persona: 'STUDENT',
     tier: 'T2',
@@ -99,7 +99,7 @@ export const studentsPages: PageDef[] = [
     element: () => import('./pages/portal/StudentMarksPage'),
   },
   {
-    path: 'portal/student/timetable',
+    path: 'student/timetable',
     title: 'My timetable',
     persona: 'STUDENT',
     tier: 'T2',
@@ -108,7 +108,7 @@ export const studentsPages: PageDef[] = [
     element: () => import('./pages/portal/StudentTimetablePage'),
   },
   {
-    path: 'portal/student/fees',
+    path: 'student/fees',
     title: 'My fees / dues',
     persona: 'STUDENT',
     tier: 'T1',
@@ -117,7 +117,7 @@ export const studentsPages: PageDef[] = [
     element: () => import('./pages/portal/StudentFeesPage'),
   },
   {
-    path: 'portal/student/notices',
+    path: 'student/notices',
     title: 'Notices',
     persona: 'STUDENT',
     tier: 'T2',

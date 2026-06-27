@@ -20,7 +20,7 @@ import (
 
 // NewRouter returns a chi router with the common middleware stack and a /healthz
 // liveness endpoint that walks the whole chain. allowedOrigins enables browser CORS
-// (the SPA and the API are served from different origins in dev: :5173/:5174 vs :8081).
+// (the SPA and the API are served from different origins in dev: :5173/:5174 vs :8091).
 func NewRouter(serviceName string, allowedOrigins ...string) *chi.Mux {
 	r := chi.NewRouter()
 	if len(allowedOrigins) > 0 {

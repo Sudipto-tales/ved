@@ -44,11 +44,22 @@ export default function EnrollmentPage() {
             loading={isLoading}
             rows={rows}
             rowKey={(r) => r.id}
+            searchable
+            searchText={(r) => `${r.login_identifier} ${r.roll_no ?? ''} ${section?.name ?? ''} ${section?.stage_name ?? ''}`}
             empty={<EmptyState icon={<Icon name="users" />} title="No students enrolled" desc="This section has no enrollments yet." />}
             columns={[
               { header: 'Roll', cell: (r) => <span className="subtle">{r.roll_no ?? '—'}</span>, width: 80 },
               { header: 'Login', cell: (r) => <span style={{ fontWeight: 600 }}>{r.login_identifier}</span> },
               { header: 'Status', cell: (r) => <Badge tone={r.status === 'ACTIVE' ? 'success' : 'neutral'}>{r.status}</Badge> },
+              {
+                header: '',
+                align: 'right',
+                cell: () => (
+                  <span className="flex gap-8" style={{ justifyContent: 'flex-end' }}>
+                    <Link to={`/sections/${sectionId}`} title="View section" aria-label="View section" className="icon-btn" onClick={(e) => e.stopPropagation()}><Icon name="eye" /></Link>
+                  </span>
+                ),
+              },
             ]}
           />
         </Card>

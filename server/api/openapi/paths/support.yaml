@@ -1,0 +1,137 @@
+# School-side support slice. A tenant member raises a ticket and exchanges messages with
+# the platform; writes follow the golden rule and sync to control_plane.support_*.
+# Mirrors internal/features/support/support.go.
+openapi: 3.1.0
+info:
+  title: VED support slice
+  version: 1.0.0
+paths: {}
+
+SupportTickets:
+  get:
+    operationId: listSupportTickets
+    summary: The tenant's support tickets
+    tags: [support]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Tickets, newest-active first.
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tickets]
+              properties:
+                tickets: { type: array, items: { $ref: '#/schemas/SupportTicket' } }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+  post:
+    operationId: createSupportTicket
+    summary: Open a support ticket (subject + first message)
+    tags: [support]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/schemas/CreateTicketInput' }
+    responses:
+      '201':
+        description: Created ticket + first message.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/SupportThread' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+SupportTicketDetail:
+  get:
+    operationId: getSupportTicket
+    summary: One ticket with its full message thread
+    tags: [support]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    responses:
+      '200':
+        description: Ticket + ordered messages.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/SupportThread' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '404': { $ref: '../components/common.yaml#/components/responses/NotFound' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+SupportTicketMessages:
+  post:
+    operationId: addSupportMessage
+    summary: Append a message to a ticket
+    tags: [support]
+    security: [{ bearerAuth: [] }]
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      - $ref: '../components/common.yaml#/components/parameters/TenantIdHeader'
+      - $ref: '../components/common.yaml#/components/parameters/TenantSlugHeader'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema: { type: object, required: [body], properties: { body: { type: string } } }
+    responses:
+      '201':
+        description: Updated thread.
+        content:
+          application/json:
+            schema: { $ref: '#/schemas/SupportThread' }
+      '400': { $ref: '../components/common.yaml#/components/responses/BadRequest' }
+      '401': { $ref: '../components/common.yaml#/components/responses/Unauthorized' }
+      '404': { $ref: '../components/common.yaml#/components/responses/NotFound' }
+      '500': { $ref: '../components/common.yaml#/components/responses/Internal' }
+
+schemas:
+  SupportTicket:
+    type: object
+    required: [id, subject, priority, status, last_message_at, created_at, message_count]
+    properties:
+      id: { type: string, format: uuid }
+      subject: { type: string }
+      priority: { type: string, enum: [low, normal, high] }
+      status: { type: string, enum: [open, pending, resolved] }
+      last_message_at: { type: string, format: date-time }
+      created_at: { type: string, format: date-time }
+      message_count: { type: integer }
+
+  SupportMessage:
+    type: object
+    required: [id, ticket_id, author_type, author_name, body, created_at]
+    properties:
+      id: { type: string, format: uuid }
+      ticket_id: { type: string, format: uuid }
+      author_type: { type: string, enum: [SCHOOL, PLATFORM] }
+      author_name: { type: string }
+      body: { type: string }
+      created_at: { type: string, format: date-time }
+
+  SupportThread:
+    type: object
+    required: [ticket, messages]
+    properties:
+      ticket: { $ref: '#/schemas/SupportTicket' }
+      messages: { type: array, items: { $ref: '#/schemas/SupportMessage' } }
+
+  CreateTicketInput:
+    type: object
+    required: [subject, body]
+    properties:
+      subject: { type: string }
+      priority: { type: string, enum: [low, normal, high] }
+      body: { type: string }

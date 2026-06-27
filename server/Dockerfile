@@ -1,6 +1,6 @@
 # Multi-stage build for the two VED binaries. docker-compose.yml builds this with
 # `target: node` and `target: controlplane` (both from one cached build stage).
-FROM golang:1.22-alpine AS build
+FROM golang:1.25-alpine AS build
 WORKDIR /src
 
 # Cache deps first.

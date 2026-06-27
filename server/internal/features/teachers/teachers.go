@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -80,6 +81,18 @@ func (s *Service) Onboard(ctx context.Context, tenantID, actor uuid.UUID, in Onb
 			return err
 		}
 		hlc := onboarding.NowHLC()
+
+		// Enforce the tenant's dynamic onboarding template (M10).
+		present := map[string]bool{
+			"qualifications": len(in.Qualifications) > 0, "specialization": in.Specialization != "",
+			"joining_date": in.JoiningDate != "", "employee_code": in.EmployeeCode != "",
+		}
+		if missing, err := s.engine.MissingRequiredFields(ctx, tx, "TEACHER", present); err != nil {
+			return err
+		} else if len(missing) > 0 {
+			return fmt.Errorf("%w: required field(s): %s", ErrInvalidInput, strings.Join(missing, ", "))
+		}
+
 		member, err := s.engine.CreateMember(ctx, tx, onboarding.MemberInput{
 			TenantID: tenantID, Actor: actor, Name: in.Name, UserType: "TEACHER",
 			SchoolSlug: slug, RoleIDs: in.RoleIDs, HLC: hlc,

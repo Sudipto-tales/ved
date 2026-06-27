@@ -34,6 +34,11 @@ contact_phone     TEXT?
 - `institution_type` flips school vs college presentation; the academic depth itself is
   the `program`/`program_stage` config in [17](../17-academics-model.md).
 - Branding is referenced by `logo_storage_key`, never stored inline.
+- **`allow_superadmin_access` (M11, `BOOLEAN DEFAULT false`)** is the **tenant-owned
+  consent** for platform "Login As Tenant" support sessions — toggled by a tenant admin
+  (`tenant.settings`). The control plane reads it before minting a short-lived, audited
+  impersonation token; it never sees a password. See
+  [24 §5](../24-login-and-registration.md).
 
 ## `academic_year`
 

@@ -3,3 +3,7 @@ dist
 dist-ssr
 *.local
 .env
+
+# Orval-generated API client (run: npm run gen:api)
+src/shared/api/generated/
+platform/src/shared/generated/

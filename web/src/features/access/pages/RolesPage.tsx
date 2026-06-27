@@ -2,7 +2,7 @@
 // code-defined permission catalog; the server enforces them via requirePermission.
 // System roles (seeded at provisioning) are protected from edit/delete.
 import { useMemo, useState } from 'react';
-import { Badge, Button, Card, PageHeader, Spinner } from '@/shared/ui';
+import { Badge, Button, Card, Icon, PageHeader, Spinner } from '@/shared/ui';
 import {
   usePermissionCatalog,
   useRoles,
@@ -31,6 +31,18 @@ export default function RolesPage() {
   const [editing, setEditing] = useState<Role | null>(null);
   const [name, setName] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
+
+  function roleHaystack(r: Role): string {
+    const summary = r.permissions.includes('tenant.admin')
+      ? 'tenant.admin full control'
+      : r.permissions.join(' ');
+    return `${r.name} ${summary}`.toLowerCase();
+  }
+
+  const filteredRoles = (roles.data?.roles ?? []).filter((r) =>
+    search.trim() ? roleHaystack(r).includes(search.trim().toLowerCase()) : true,
+  );
 
   const groups = useMemo(() => groupByNamespace(catalog.data?.permissions ?? []), [catalog.data]);
   const busy = createRole.isPending || updateRole.isPending;
@@ -132,10 +144,19 @@ export default function RolesPage() {
       </Card>
 
       <Card className="mt-16">
-        <h3 style={{ fontSize: 15, marginBottom: 12 }}>Roles</h3>
+        <div className="between" style={{ marginBottom: 12 }}>
+          <h3 style={{ fontSize: 15 }}>Roles</h3>
+          <input
+            className="input"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search roles…"
+            style={{ maxWidth: 220 }}
+          />
+        </div>
         {roles.isLoading && <Spinner />}
         {roles.error && <p style={{ color: 'var(--danger)' }}>Failed to load roles.</p>}
-        {roles.data?.roles.map((r) => (
+        {filteredRoles.map((r) => (
           <div className="row" key={r.id} style={{ alignItems: 'flex-start' }}>
             <div style={{ flex: 1 }}>
               <div className="flex gap-8" style={{ alignItems: 'center' }}>
@@ -151,18 +172,30 @@ export default function RolesPage() {
               </div>
             </div>
             {!r.is_system && (
-              <div className="flex gap-8">
-                <Button variant="ghost" onClick={() => startEdit(r)}>Edit</Button>
-                <Button
-                  variant="ghost"
+              <span className="flex gap-8" style={{ justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  title="Edit"
+                  aria-label="Edit"
+                  onClick={(e) => { e.stopPropagation(); startEdit(r); }}
+                >
+                  <Icon name="edit" />
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  title="Delete"
+                  aria-label="Delete"
                   disabled={deleteRole.isPending}
-                  onClick={() => {
-                    if (confirm(`Delete role "${r.name}"?`)) deleteRole.mutate(r.id);
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Delete role "${r.name}"?`)) deleteRole.mutate(r.id);
                   }}
                 >
-                  Delete
-                </Button>
-              </div>
+                  <Icon name="trash" />
+                </button>
+              </span>
             )}
           </div>
         ))}

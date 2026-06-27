@@ -29,6 +29,10 @@ type Membership struct {
 type AccessClaims struct {
 	Memberships []Membership `json:"memberships"`
 	MustReset   bool         `json:"must_reset"`
+	// Impersonator, when set, is the platform superadmin id behind a "Login As Tenant"
+	// session (M11). Empty for ordinary logins. Carried so the tenant plane can stamp
+	// audit rows as impersonated and the UI can show a "viewing as support" banner.
+	Impersonator string `json:"imp,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -72,6 +76,27 @@ func (m *Manager) IssueAccess(userID uuid.UUID, memberships []Membership, mustRe
 			Issuer:    m.issuer,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessTTL)),
+		},
+	}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secret)
+}
+
+// IssueImpersonation mints a SHORT-LIVED access token for an admin-initiated "Login As
+// Tenant" support session (M11). It carries the target user's memberships (so RLS + RBAC
+// behave exactly as for that user) plus the impersonating superadmin's id, and never
+// carries a refresh token — the session is deliberately ephemeral. mustReset is forced
+// false so support is not bounced into a password change it cannot complete.
+func (m *Manager) IssueImpersonation(userID uuid.UUID, memberships []Membership, impersonatorID uuid.UUID) (string, error) {
+	now := m.now()
+	claims := AccessClaims{
+		Memberships:  memberships,
+		MustReset:    false,
+		Impersonator: impersonatorID.String(),
+		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   userID.String(),
+			Issuer:    m.issuer,
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(30 * time.Minute)),
 		},
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secret)

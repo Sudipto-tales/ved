@@ -1,6 +1,7 @@
 // Authenticated shell — Premium SaaS Minimalism: a clean white sidebar with grouped,
 // icon-led nav (active item gets the accent tint), a spacious content area on a muted
 // background. Nav is built from the aggregated PageDefs; gated items hidden via <Can>.
+import { useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { protectedPages } from '@/app/pages';
 import type { Persona } from '@/shared/types/page';
@@ -8,7 +9,8 @@ import { useAuth } from '@/shared/auth/AuthProvider';
 import { useSyncPermissions } from '@/shared/auth/useSyncPermissions';
 import { useTenant } from '@/shared/tenant/TenantProvider';
 import { Can } from '@/shared/authz/Can';
-import { Icon, type IconName } from '@/shared/ui';
+import { Icon, useCommandHotkey, type IconName } from '@/shared/ui';
+import { AppCommandPalette } from '@/shared/search/AppCommandPalette';
 
 const PERSONA_ORDER: Persona[] = ['ADMIN', 'STAFF', 'TEACHER', 'STUDENT', 'GUARDIAN'];
 
@@ -27,6 +29,7 @@ const ICONS: Record<string, IconName> = {
   communication: 'bell',
   reports: 'chart',
   learning: 'book',
+  support: 'help',
 };
 const iconFor = (path: string): IconName => ICONS[path.split('/')[0]] ?? 'grid';
 
@@ -47,6 +50,9 @@ export function AppShell() {
   useSyncPermissions(); // load effective permissions for the active tenant (M2)
   const loc = useLocation();
   const navPages = protectedPages.filter((p) => p.nav);
+
+  const [searchOpen, setSearchOpen] = useState(false);
+  useCommandHotkey(() => setSearchOpen(true));
 
   const userType = memberships.find((m) => m.tenant_id === activeTenantId)?.user_type ?? 'EMPLOYEE';
   const allowed = PERSONAS_FOR[userType] ?? ['ADMIN', 'STAFF'];
@@ -100,9 +106,27 @@ export function AppShell() {
         </button>
       </aside>
 
-      <main className="main">
-        <Outlet />
-      </main>
+      <div className="content">
+        <header className="topbar">
+          <button
+            type="button"
+            className="topbar-search"
+            onClick={() => setSearchOpen(true)}
+            aria-label="Search (Cmd/Ctrl+K)"
+          >
+            <Icon name="search" size={16} />
+            <span className="ts-placeholder">Search…</span>
+            <span className="kbd">⌘K</span>
+          </button>
+          <div className="spacer" />
+        </header>
+
+        <main className="main">
+          <Outlet />
+        </main>
+      </div>
+
+      <AppCommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

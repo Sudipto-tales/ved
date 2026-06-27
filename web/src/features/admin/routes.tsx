@@ -32,6 +32,16 @@ export const adminPages: PageDef[] = [
     element: () => import('./pages/DropdownsPage'),
   },
   {
+    path: 'admin/onboarding-forms',
+    title: 'Onboarding Forms',
+    persona: 'ADMIN',
+    permission: 'tenant.settings',
+    tier: 'T2',
+    status: 'done',
+    nav: true,
+    element: () => import('./pages/OnboardingFormsPage'),
+  },
+  {
     path: 'admin/rooms',
     title: 'Rooms',
     persona: 'ADMIN',

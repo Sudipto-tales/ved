@@ -15,12 +15,14 @@ import (
 	"github.com/weloin/ved/internal/features/platform"
 	"github.com/weloin/ved/internal/features/registration"
 	"github.com/weloin/ved/internal/features/synchub"
+	"github.com/weloin/ved/internal/platform/auth"
 	"github.com/weloin/ved/internal/platform/bus"
 	"github.com/weloin/ved/internal/platform/config"
 	"github.com/weloin/ved/internal/platform/db"
 	"github.com/weloin/ved/internal/platform/httpx"
 	"github.com/weloin/ved/internal/platform/license"
 	"github.com/weloin/ved/internal/platform/migrate"
+	syncrelay "github.com/weloin/ved/internal/platform/sync"
 
 	"github.com/google/uuid"
 )
@@ -54,6 +56,9 @@ func main() {
 	platSvc := platform.NewService(platRepo, tokens)
 	signer := license.NewSigner(cfg.LicenseSigningKey)
 	regSvc := registration.NewService(pool, nodeID, signer)
+	// Node-compatible token manager: "Login As Tenant" (M11) mints tenant access tokens the
+	// node accepts, so it must sign with the SAME secret the node verifies with (JWT_SECRET).
+	nodeTokens := auth.NewManager(cfg.JWTSecret)
 
 	if cfg.DevSeed {
 		if err := platform.SeedSuperAdmin(ctx, platRepo); err != nil {
@@ -61,6 +66,10 @@ func main() {
 		}
 		if err := platform.SeedPlans(ctx, platRepo); err != nil {
 			slog.Error("seed plans", "err", err)
+		}
+		// M11: every plan needs a version-1 price point for grandfathered pricing.
+		if err := registration.EnsurePlanVersions(ctx, pool); err != nil {
+			slog.Error("ensure plan versions", "err", err)
 		}
 	}
 
@@ -75,6 +84,14 @@ func main() {
 		} else {
 			slog.Info("sync hub started", "nats", cfg.NATSURL)
 		}
+		// Cloud→node config push-down (M6): relay control_plane.cp_outbox to the config
+		// stream for the owning nodes to apply. Owner pool (control plane has no RLS).
+		if err := b.EnsureConfigStream(); err != nil {
+			slog.Warn("cloud relay: ensure config stream", "err", err)
+		} else {
+			go syncrelay.NewCloudRelay(pool, b).Run(ctx)
+			slog.Info("cloud relay started", "nats", cfg.NATSURL)
+		}
 	}
 
 	r := httpx.NewRouter("controlplane", cfg.CORSOrigins...)
@@ -88,6 +105,14 @@ func main() {
 	r.Group(func(g chi.Router) {
 		g.Use(platform.Authenticator(tokens))
 		registration.RegisterPlatform(g, regSvc)
+		registration.RegisterPlatformV2(g, regSvc)                        // M9 super-admin: analytics, license lifecycle, plans, tenant ops
+		registration.RegisterPlatformM11(g, regSvc)                       // M11 super-admin: KYC review + risk/source analytics
+		registration.RegisterPlatformImpersonation(g, regSvc, nodeTokens) // M11: Login As Tenant
+		registration.RegisterPlatformPlanVersions(g, regSvc)              // M11: plan versioning / grandfathered pricing
+		registration.RegisterPlatformAutoPay(g, regSvc)                   // M11: AutoPay toggle + analytics
+		registration.RegisterPlatformSearch(g, regSvc)                    // global search (navbar command palette)
+		registration.RegisterPlatformSupport(g, regSvc)                   // support ticketing console
+		registration.RegisterSettingsReleases(g, r, regSvc)               // settings store + app-releases registry (+ public /releases)
 	})
 
 	if err := httpx.Serve(cfg.HTTPAddr, r); err != nil {

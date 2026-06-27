@@ -5,7 +5,103 @@ The single place that records **how far the build has progressed** against the p
 
 **Legend:** ✅ done · 🟡 scaffolded / partial · ⬜ not started
 
-> **YOU ARE HERE:** M8 (LMS) **complete and verified** — the final roadmap milestone, so
+> **YOU ARE HERE:** **M11 (Login-As · Magic-Link · Plan-Versioning · KYC · AutoPay) — backend
+> + frontend complete; live DB verification PENDING.** The five deferred super-admin/platform
+> features (docs/promts.md) are built as five vertical slices. **Slice A — KYC/Risk/Source**
+> (`cp/00006`): `school_registration` gains kyc_status/business_reg/gst/notes + risk_score
+> (auto-triaged at register: free-email domain → MEDIUM, >5 sign-ups/hr → HIGH, dup phone) +
+> risk_factors + source (WEBSITE/REFERRAL/CAMPAIGN/DIRECT); superadmin `POST …/kyc` verify/reject
+> + `kyc-analytics`. **Slice B — Login-As** (`00014` tenant + `cp/00007`): impersonation is
+> TENANT-CONSENTED (`tenant_profile.allow_superadmin_access`, the school admin toggles it,
+> golden rule) — `POST /platform/tenants/{id}/login-as` mints a SHORT-LIVED (30-min)
+> node-compatible access token (`auth.IssueImpersonation`, new `imp` claim) for the tenant's
+> School Admin, gated by consent, audited to a new `cp_audit_log`. Passwords are never shown.
+> **Slice C — Magic Link** (`00015`): provisioning mints a one-time `activation_token` (hash
+> stored; raw returned in ApproveResult); node public `POST /auth/activate` (controlled-bypass
+> `auth_activation` SECURITY DEFINER) consumes it single-use → logs the admin in (still forced
+> to reset). **Slice D — Plan versioning** (`cp/00008`): immutable `plan_version` chain +
+> `subscription.plan_version_id` pin → new subscribers get the latest version, existing stay
+> **grandfathered**; `GET/POST /platform/plans/{id}/versions` with per-version subscriber counts
+> + price diff; catalog headline rolls forward on a new version. **Slice E — AutoPay**
+> (`cp/00009`): `subscription.autopay_enabled` + last_status/failed_count; toggle +
+> adoption/failed/renewal analytics; surfaced on the enriched tenant row. FE (platform SPA,
+> manual `platformApi.ts`): KYC/risk/source columns + KYC verify + magic-link shown at approval;
+> **Login As** button (opens `tenantUrl/#login-as=<token>`); AutoPay column/toggle + analytics
+> cards; Plans version-history panel + new-version form. Tenant app: super-admin-access consent
+> toggle + a public **/activate** page (magic-link + impersonation-hash handoff).
+> **Verified:** `go build`/`go vet -tags=integration`/`gofmt` clean across the module; both web
+> apps `tsc -b` + `vite build` + `build:platform` clean (EXIT 0). **5 new integration tests
+> WRITTEN** (risk scoring + KYC decision; consent-gated login-as token + audit; magic-link
+> single-use; plan grandfathering; autopay analytics) — _compile-verified only._ **PENDING: the
+> live integration run + HTTP smoke** — the dev Postgres port (5432) was held by an unrelated
+> container this session, so `./ved.sh test` couldn't bind; run it once the port is free.
+> _Next: live-verify M11, then **M12** (Support tickets + AI chatbot). Carried-forward: M11
+> endpoints use the manual API clients (OpenAPI promotion is a doc follow-up); cross-subdomain
+> impersonation-token handoff via URL hash (tighten to a one-time code later); GUARDIAN
+> onboarding template._
+
+> **(prev) M10 (Dynamic onboarding template) complete & verified.** A School Admin
+> can now tailor the people-onboarding forms without a code change (docs/06). Migration
+> `00013_onboarding_template` adds two tenant-scoped + RLS + sync tables: **`onboarding_field_config`**
+> (per person_type, toggles VISIBLE + REQUIRED + label + order over the BUILT-IN OnboardInput
+> fields — the "field-toggle" model, `field_key` always maps to an existing field, no arbitrary
+> columns) and **`dropdown_option`** (admin-managed option lists: GENDER/BLOOD_GROUP/
+> STUDENT_CATEGORY/GUARDIAN_RELATION/DEPARTMENT/DESIGNATION). The `access` slice gains the
+> service+handlers (`tenantsetup.go`): `GET /access/onboarding-template/{type}` (ungated —
+> the forms need it; falls back to code defaults if un-customized), `PUT …` (tenant.settings,
+> golden rule: field upserts + ONE outbox + ONE audit), and `GET/POST/DELETE /access/dropdowns`.
+> The onboarding **engine** gained `MissingRequiredFields`, and students/teachers/staff
+> `Onboard` now reject when a visible+required field is absent (core name/admission_no still
+> enforced in code). Defaults are seeded at provisioning + dev boot (idempotent). FE: a tenant
+> **Onboarding Forms** admin page (per-type visible/required/label editor) + the **Dynamic
+> Dropdowns** page rewired to real CRUD, and the student/teacher/staff onboard forms now render
+> from the template (hide non-visible, mark+validate required, dropdown-backed selects).
+> **Verified:** `go build`/`vet`/`gofmt` clean; **3 new integration tests** green (template
+> seed+save golden rule + non-configurable-field rejected; engine required-field enforcement;
+> dropdown upsert-in-place + RLS isolation + soft-delete) alongside the full suite; both web
+> apps `tsc -b` + `vite build` + `build:platform` clean; **live HTTP smoke** on the node — seeded
+> template (8 student fields) + 20 dropdowns, `PUT` dob→required (204), `POST` dropdown (200),
+> unauth `PUT` 401, and the marquee loop: **onboard with dob missing → 400 "required field(s):
+> Date of Birth", with dob present → 201.** _Next per the plan: **M11** (Login-As/magic-link/
+> plan-versioning/KYC/AutoPay), **M12** (Support tickets + AI chatbot). Carried-forward: the
+> GUARDIAN onboarding template (no form yet); promoting the M9/M10 endpoints into the OpenAPI
+> spec + generated client (both use the manual API clients today, matching their slices)._
+
+> **(prev) M9 (Super-Admin Platform v2) — foundation round complete & verified.**
+> The control-plane super-admin surface (docs/promts.md) went from happy-path-only to an
+> analytics-driven console: a new cp migration (`00004_platform_v2`) adds a **license status
+> state machine** (ACTIVE/SUSPENDED/EXPIRED/CANCELLED + auto-renew + end-of-cycle cancel +
+> `superseded_by`), `payment_proof.clarification_note`, `plan_catalog.annual_price/status`,
+> and `school_registration.reminded_at`. A new `registration/platform_v2.go` adds, all
+> platform-gated: **registration analytics + funnel** (avg-approval-time, approval-rate,
+> volume/day) + Send-Reminder; **payment-proof clarification** (INFO_REQUESTED + note,
+> surfaced to the public status poll) + verification analytics; **license lifecycle** —
+> suspend/resume (mirrors `revoked` for the node), cancel (immediate | end-of-cycle), and
+> extend/change-plan which **re-sign** a fresh license via `license.Sign` and supersede the
+> old row — every license mutation also writes a `control_plane.cp_outbox` push for the node;
+> **subscriptions analytics** (MRR normalized per cycle, ARR, churn, plan popularity, revenue
+> trend) + **plan CRUD** (create/update/duplicate/archive); **tenant enrichment** (plan +
+> license + user-count + subscription join, suspend/resume cascade, billing history); and a
+> composed **dashboard** endpoint. FE: a **Recharts chart kit** (`shared/ui/charts` —
+> FunnelChart/TrendChart/BarSeries/DonutChart/DotChart on design tokens), a grouped sidebar
+> (Dashboard · TENANTS · BILLING · INSIGHTS), a new **Plans & Prices** page, and rebuilt
+> Dashboard/Registrations/PaymentProofs/Licenses/Subscriptions/Tenants pages. **Verified:**
+> `go build`/`go vet`/`gofmt` clean; full integration suite green incl. **4 new M9 tests**
+> (license suspend-mirror + extend re-sign verifies + cp_outbox push; clarification flips
+> status + public poll + settled-row no-op; plan archive leaves the public catalog; analytics
+> aggregates incl. MRR×12=ARR + enriched tenant); both web apps `tsc -b` + `vite build` +
+> `build:platform` clean; **live HTTP smoke** on the control-plane binary — login → all v2
+> endpoints 200, 401 without token, suspend→204→SUSPENDED, extend→new signed license, real
+> dashboard counts (12 tenants, MRR ₹66,666, license distribution Premium 8/Starter 4).
+> _Carried-forward: v2 endpoints use the platform SPA's manual `api.ts` client (consistent
+> with the existing dashboard/tenants/licenses/subscriptions pages) — adding them to
+> `controlplane.yaml` + the generated client is a documentation follow-up. **Deferred to
+> M11** (per the plan): tenant impersonation / "Login As", magic login links, plan
+> versioning / grandfathering, KYC / risk / source tracking, AutoPay. **M10** = dynamic
+> school-admin onboarding template (field-toggle + dropdowns). **M12** = Support tickets +
+> AI chatbot (Support page stays a scaffold; dashboard shows 0 open tickets)._
+
+> **(prev) M8 (LMS) — complete and verified** — the final roadmap milestone, so
 > the whole phased build M0→M8 is now done. The new `learning` slice delivers the
 > content→submit→grade loop: teachers publish **assignments** (+ materials) anchored on a
 > `teaching_assignment`; students **submit** (self-service — resolved from their membership,
@@ -21,8 +117,11 @@ The single place that records **how far the build has progressed** against the p
 > by trigger; student can't create/grade (403), non-student can't submit (403). FE: teacher
 > Assignments + grading screens, `tsc`/build clean. **The roadmap is complete (M0–M8).**
 > _Carried-forward (post-roadmap polish): LMS T3c (quizzes/discussion), lesson plans,
-> MinIO blob upload, student/guardian LMS FE; plus the standing items — platform SPA,
-> academics setup FE, OpenAPI specs, DB-integration tests, M6 hardening (HLC-merge/mTLS/DR)._
+> MinIO blob upload, student/guardian LMS FE; academics setup FE. **M6 is now
+> code-complete** — pillars 1–5 (real HLC + LWW/tombstone merge), bidirectional cloud→node
+> push-down, and the offline license-grace state machine all landed & tested; only the
+> infra items remain (mTLS / per-tenant NATS accounts / WAL archiving / DR drill) plus
+> wiring the license guard as a mutation-gate._
 
 > **(prev) M7 (Guardian Portal) — complete and verified** — child-scoped read
 > access on top of RLS. Per docs/18 the guardian is *an actor + a portal, not a slice*:
@@ -192,11 +291,50 @@ rebuilt. Roadmap (P0–P6) in [docs/22](./docs/22-frontend.md); tokens in [docs/
 | **M3** Onboarding + Students | credential gen, onboarding engine, first real domain slice | ✅ verified (student.onboard tx + credential gen + roster/detail; notes retired) |
 | **M4** Control Plane | registration state machine, payment-proof, licensing | ✅ verified — backend + **platform SPA** (login, registrations review/approve, tenants, licenses) |
 | **M5** Teachers/Staff/Academics/Finance | replicate the M3 shape across slices | ✅ verified (teachers, staff, academics, finance; append-only ledgers DB-enforced) |
-| **M6** Sync & Offline | NATS relay + inbox + HLC; wiring, not rewrite | 🟡 core verified (relay → JetStream → idempotent durable hub + offline replay); HLC-merge/mTLS/DR deferred |
-| **M7** Guardian Portal & Mobile | child-scoped read API; Expo read-heavy | 🟡 portal verified (child-scoped read API + promote + FE); Expo mobile + T2 writes ⬜ |
+| **M6** Sync & Offline | NATS relay + inbox + HLC; wiring, not rewrite | ✅ code-complete (pillars 1–5: real HLC + row-level LWW/tombstone merge, bidirectional cloud→node push-down, offline license-grace state machine); mTLS/per-tenant accounts/WAL = infra, deferred |
+| **M7** Guardian Portal & Mobile | child-scoped read API; Expo read-heavy | ✅ portal + **T2 guarded writes** (pay/leave/contact + maker-checker) + **Expo mobile read app** (login → children → attendance/marks/fees, `tsc` clean) |
 | **M8** LMS | content → assignments → submission/grading | ✅ verified (T3a+T3b: assignments/materials → submit → grade → marks; append-only; T3c deferred) |
+| **M9** Super-Admin Platform v2 | analytics + funnel, license lifecycle, payment clarification, subscriptions/plans, tenant enrichment, dashboard, Recharts kit | ✅ verified (foundation round; Login-As/magic-link/plan-versioning/KYC = M11, onboarding template = M10, support = M12) |
+| **M10** Dynamic onboarding template | school-admin configures per-type field visibility/required + dropdown lists; onboard forms + backend validation honor it | ✅ verified (field-toggle + dropdowns; seeded defaults; live required-field enforcement) |
+| **M11** Login-As · Magic-Link · Plan-Versioning · KYC · AutoPay | tenant-consented impersonation, one-time activation links, grandfathered pricing, registration KYC/risk/source, AutoPay analytics | 🟡 backend+FE built & compile/typecheck-clean (5 integration tests written); **live DB run + HTTP smoke pending** (port 5432 held this session) |
 
 ---
+
+## DoD backfill — OpenAPI contract + DB-integration tests — ✅ complete (all slices)
+
+The two cross-cutting DoD gaps carried forward since M1 ("OpenAPI specs" + "automated
+DB-integration tests") are now closed across **every** slice. The `students` slice proved
+the shape; the rest replicate it. **OpenAPI is the frozen fence:** Orval generates the TS
+client + Zod from the spec, and each FE feature **consumes the generated client** (the
+hand-written contract types are deleted — the spec is the single source).
+
+**Tooling (shared):**
+- Tenant-plane spec: `server/api/openapi/openapi.yaml` (root) + `components/common.yaml` + `paths/<slice>.yaml` — **9 slices, ~50 operations**, redocly-lint clean.
+- Control-plane spec (separate plane, platform JWT): `server/api/openapi/controlplane.yaml` — 11 operations, redocly-lint clean.
+- Codegen: `web/orval.config.ts` (tenant app + platform app targets), mutators `web/src/shared/api/mutator.ts` + `web/platform/src/shared/mutator.ts`, `npm run gen:api`. Generated dirs gitignored.
+- Test harness: `server/internal/platform/testdb/testdb.go` — `Pool` (ved_app, RLS-enforcing) + `ControlPlanePool` (owner) + throwaway tenants, behind the `integration` build tag. `./ved.sh test` ensures infra and runs `-tags=integration`; default `go test ./...` stays DB-free.
+
+**Per-slice (spec ✅ · FE consumes generated ✅ · integration tests ✅ pass on live PG):**
+
+| Slice | Ops | Integration tests (what they prove) |
+|---|---|---|
+| students | 6 | RLS isolation · golden-rule atomicity · rollback (no orphan outbox/audit) |
+| teachers | 3 | RLS · golden rule · dup employee_code rollback |
+| staff | 3 | RLS · golden rule · dup rollback |
+| access (RBAC) | 12 | RLS on roles · role-create golden rule · dup-name rollback |
+| finance | 7 | RLS · derived outstanding (Σ DEBIT−Σ CREDIT) · append-only void preserves payment · gapless receipts |
+| academics | 14 | RLS · **append-only attendance** (correction = new row, latest-by-hlc wins) |
+| learning (LMS) | 6 | RLS · **append-only** submit/grade · grade → mark_entry in the ONE marks ledger |
+| identity | 4 | login with generated temp credential (must-reset) · wrong-password rejected |
+| guardian | 5 | child-scoping boundary — sees only linked child, **foreign child rejected** |
+| registration (CP) | 11 | golden chain: register → proof → approve → tenant ACTIVE + **gapless invoice** + license + provisioned admin |
+
+**Live verification:** `./ved.sh test ./...` → **all 10 slices pass** on the live Postgres
+(28 integration tests). `go build`/`go vet`/`gofmt` clean; both web apps `tsc -b` +
+`vite build` + `build:platform` clean.
+**Carried-forward (minor):** Go-side request validation (`go-playground/validator`) and
+wiring the generated **Zod** schemas into the FE forms (schemas are generated, not yet
+imported by forms) — both incremental, neither blocks the contract or the tests.
 
 ## Documentation — ✅ complete
 
@@ -209,10 +347,12 @@ reference are all written and cross-linked.
 
 | Item | Status |
 |---|---|
-| `ved.sh` (build/start/stop + helpers) | ✅ runs, syntax-checked |
+| `ved.sh` (build/start/stop + helpers + `test`) | ✅ runs, syntax-checked |
 | `docker-compose.yml` (infra + `app` profile) | ✅ `docker compose config` validates |
 | `.env.example` | ✅ |
 | `docs/commands.md` | ✅ |
+| OpenAPI → TS client codegen (`web/ npm run gen:api`, Orval; tenant + platform apps) | ✅ all slices |
+| DB-integration tests (`./ved.sh test`, `-tags=integration`) | ✅ all 10 slices (28 tests) |
 
 `./ved.sh up infra` works today. `./ved.sh up` (full) works once the steps below pass.
 
@@ -380,28 +520,45 @@ foreign-tenant 0.
 **Carried-forward:** academics setup/attendance FE; fee structures/schedules/concessions/
 fines; COURSE_BASED mode; timetable; full tenant-setup slice (terms, rooms, dropdowns).
 
-## Backend — `server/` (M6 Sync & Offline) — 🟡 core verified
+## Backend — `server/` (M6 Sync & Offline) — ✅ code-complete (pillars 1–5)
 
 Local-first by WIRING the existing outbox to JetStream — no rewrite (every write has
-routed through the outbox since M0).
+routed through the outbox since M0). Core (pillars 1–4) was verified live earlier; this pass
+adds the remaining code pillars (real HLC, conflict merge, the reverse sync direction, and
+the offline license state machine).
 
 | Component | File(s) | Status |
 |---|---|---|
-| NATS JetStream transport kernel (connect, ensure stream, publish w/ MsgId, durable subscribe) | `internal/platform/bus/bus.go` | ✅ |
+| NATS JetStream transport kernel (connect, ensure stream, publish w/ MsgId, durable subscribe) | `internal/platform/bus/bus.go` | ✅ + config stream `VED_CONFIG` (`cloud.>`) |
 | Sync envelope + subject scheme `tenant.<id>.<aggregate>.<op>` | `internal/platform/sync/sync.go` | ✅ |
 | Relay worker: unsent outbox → JetStream → mark sent (owner conn, spans tenants; at-least-once) | `internal/platform/sync/sync.go` | ✅ |
 | Cloud durable history store + idempotent inbox (PK on event_id) | `db/cpmigrations/00002_sync.sql` (`control_plane.sync_event`) | ✅ applied |
 | Sync hub: durable consumer `tenant.>` → idempotent apply | `internal/features/synchub/synchub.go` | ✅ |
-| Wiring: relay in `cmd/node`, hub in `cmd/controlplane` (both NATS-down tolerant) | `cmd/*/main.go` | ✅ |
+| **Real Hybrid Logical Clock** (wall-ms + counter + node, monotonic `Now`, `Update` on receive, lexicographically-sortable encoding, `Compare` tolerant of legacy nanos) | `internal/platform/hlc/hlc.go` | ✅ + unit tests (replaces the M1–M5 `NowHLC` placeholder) |
+| **Pillar 5 — conflict resolution:** pure LWW + tombstone decision (`Resolve`) + generic full-row applier (`ApplyRow`, row-level LWW, tombstone, resurrection, SQL-ident guarded) | `internal/platform/sync/merge.go` | ✅ + unit + integration tests |
+| **Bidirectional cloud→node push-down:** cloud `cp_outbox` + cloud relay (`cloud.<id>.*`) + node idempotent inbox apply (`ApplyConfigEvent`, registry-driven) + node durable consumer | `db/cpmigrations/00003_config_outbox.sql`, `internal/platform/sync/{cloudrelay,inbox}.go`, `internal/features/configsync/configsync.go` | ✅ + integration tests |
+| **Offline license-grace state machine** (`Evaluate` ACTIVE/GRACE/LOCKED from expiry+grace; thread-safe `Guard` the node holds) | `internal/platform/license/{grace,guard}.go` | ✅ + unit tests |
+| Wiring: relay + config consumer in `cmd/node`; hub + cloud relay in `cmd/controlplane`; `hlc.SetNode` at node startup (all NATS-down tolerant) | `cmd/*/main.go` | ✅ |
 
-**Live verification (real JetStream):** relay drained the 54-event M1–M5 backlog into the
-cloud history + marked outbox sent; fresh onboard flowed end-to-end (+1); re-armed event
-republished with **no duplicate** (MsgId + PK dedup); **offline replay** — hub down → node
-kept producing (buffered in JetStream) → hub restart resumed its durable cursor and applied
-the buffered event. Pillars 1–4 live.
-**Carried-forward:** pillar 5 (per-field HLC LWW merge for mutable rows + tombstone apply);
-mTLS + per-tenant NATS accounts; cloud→node config push-down; snapshot/replay bootstrap +
-DR drill; local WAL archiving; offline license-grace lock.
+**Verification.**
+- *Live (earlier, real JetStream):* relay drained the 54-event M1–M5 backlog into the cloud
+  history + marked outbox sent; fresh onboard flowed end-to-end; re-armed event republished
+  with **no duplicate** (MsgId + PK dedup); **offline replay** — hub down → node buffered in
+  JetStream → hub restart resumed its durable cursor. Pillars 1–4.
+- *This pass (automated):* HLC monotonic under a stalled/backwards wall clock + receive-rule
+  + legacy/new `Compare` (unit); LWW merge against the real `note` table — newer wins, stale
+  no-op, delete tombstones, newer write resurrects, stale delete can't bury a live row
+  (integration); cloud→node `tenant_profile` snapshot apply — newer wins, **redelivery is an
+  inbox no-op**, out-of-order older loses (integration); license grace phase boundaries +
+  zero-grace + empty-guard-locked (unit). `go build`/`vet`/`gofmt` clean; full integration
+  suite (all 10 slices + sync/hlc/license) green. *(Fixed a latent test-harness flake:
+  `testdb.NewTenant` slugged the UUIDv7 timestamp prefix, colliding within a millisecond —
+  now uses the random tail.)*
+**Deferred (infra/ops, not code):** mTLS + per-tenant NATS accounts; snapshot/replay
+bootstrap + DR drill; local WAL archiving (pgBackRest). **License enforcement seam:** the
+grace `Guard` is built + tested but not yet wired as a mutation-gate middleware (would need
+the dev node seeded with a long-dated dev license first, else it self-locks) — the mechanism
+is ready; flipping it on is a one-line gate + dev-license seed.
 
 ## Backend — `server/` (M7 Guardian Portal) — ✅ verified
 
@@ -422,9 +579,57 @@ enforced at the query layer (guardian_student) AND by RLS.
 sees only their 1 linked child; own child fees (outstanding 3000) + attendance 200;
 **foreign child → 403** (fees & attendance); non-guardian admin → 403; guardian → staff
 `/students` 403.
-**Carried-forward:** Tier-2 guarded writes (online fee pay via gateway, leave requests,
-contact update via maker-checker); child marks/timetable reads; the Expo mobile app
-(read-heavy, reuses this API + generated client).
+
+### M7 Tier-2 guarded writes — ✅ verified
+
+The "view dues → act" half of the portal (docs/18 Tier 2). Scoped per the earlier
+decision: **simulated** online payment (no real gateway locally) + **minimal per-feature**
+maker-checker (two small request tables, not a generic framework).
+
+| Component | File(s) | Status |
+|---|---|---|
+| Migration: `leave_request` + `contact_change_request` (mutable status tables, RLS, base/sync cols) | `db/migrations/00012_guardian_t2.sql` | ✅ applied |
+| `guardian.pay_fees` added to the seeded Guardian role | `internal/platform/authz/catalog.go` | ✅ |
+| `PayFees` — simulated pay → reuses `finance.RecordPayment` (gapless receipt + CREDIT), gated by child link **AND `can_pay`** | `internal/features/guardian/guardian.go` | ✅ golden rule (via finance) |
+| `RequestLeave` / `UpdateOwnContact` — PENDING request + outbox + audit in one tx; child-scoped / self-scoped | same | ✅ golden rule |
+| Staff side: `PendingLeave`/`DecideLeave` (gated `attendance.mark`), `PendingContact`/`DecideContact` (gated `student.update`) — **approve applies** the contact change to the guardian record in the same tx | same | ✅ |
+| OpenAPI: 4 new guardian ops (`payChildFees`/`requestChildLeave`/`listMyLeaveRequests`/`requestContactChange`) + regen TS client | `server/api/openapi/paths/guardian.yaml`, `web/src/shared/api/generated/` | ✅ |
+| Frontend: PayFees / LeaveRequest / Contact pages rewired from scaffolds to the real generated mutations | `web/src/features/guardians/pages/` | ✅ |
+| Integration tests (live PG) | `internal/features/guardian/t2_integration_test.go` | ✅ pass |
+
+**Verification:** integration suite green — request_leave golden rule (1 outbox + 1 audit) +
+foreign-child rejected on the **write** path; pay_fees writes one CREDIT and a non-paying
+guardian is rejected by `can_pay`; contact-change **approve applies** the new phone to the
+guardian record (maker-checker); a re-decision of a settled row is a no-op (`ErrNotFound`).
+`go build`/`vet`/`gofmt` clean; web `tsc -b` + `vite build` clean; new routes live on the
+node (401 gated, not 404).
+### M7 Expo mobile — ✅ runnable read app
+
+The read-heavy guardian app (docs/07 "mobile read-first"), built from scratch in `mobile/`.
+**Expo SDK 51 + React Native + TypeScript**, React Navigation (native-stack), TanStack
+Query, `expo-secure-store` for the session. It reuses the node's guardian read-API directly
+(native apps skip the subdomain gateway, so the client names the tenant with the
+`X-Tenant-Slug` header — the same header nginx injects on web).
+
+| Component | File(s) | Status |
+|---|---|---|
+| HTTP seam (Bearer + `X-Tenant-Slug`; cross-tenant `login()`) | `mobile/src/api/client.ts` | ✅ |
+| Typed guardian reads + react-query hooks (children/attendance/marks/fees/exams) | `mobile/src/api/guardian.ts` | ✅ |
+| Persisted `{serverUrl, slug, token}` session (secure-store) + auth gate | `mobile/src/auth/AuthContext.tsx`, `navigation/` | ✅ |
+| Screens: Login, Dashboard (multi-child switcher + summary), ChildAttendance/Marks/Fees | `mobile/src/screens/` | ✅ |
+| Project config + README (per-target server URL guidance) | `mobile/{package.json,app.json,tsconfig.json,README.md}` | ✅ |
+
+**Verification:** `npm install` (1150 pkgs) + `npx tsc --noEmit` **clean**; `expo config`
+parses. *(Found & fixed: Expo pins TS 5.3, but react-query v5's public types use the
+built-in `NoInfer` utility from TS ≥ 5.4 — without it `useQuery` degrades to `any`; bumped
+to TS 5.6 + `moduleResolution: bundler` so the generic data types resolve.)* Launch with
+`cd mobile && npm start` against a running node (`./ved.sh up`); sign in with a promoted
+**guardian** credential + the school slug. **The full M7 is now complete.**
+
+**Carried-forward:** Tier-2 writes on mobile (pay/leave/contact — endpoints exist, web uses
+them); push notifications (docs/16); refresh-token rotation; child timetable read; staff
+review-queue FE screens (decisions verified via API/tests); a real payment gateway behind
+the same `pay` endpoint; an app icon/splash asset.
 
 ## Backend — `server/` (M8 LMS / learning) — ✅ verified — ROADMAP COMPLETE
 
@@ -446,6 +651,92 @@ submission` rejected by trigger; student can't create/grade (403), non-student c
 submit (403).
 **Carried-forward:** T3c (quizzes/discussion/completion), lesson plans, MinIO blob upload,
 student + guardian LMS screens.
+
+## Backend — `server/` (M9 Super-Admin Platform v2) — ✅ verified
+
+The control-plane super-admin surface (docs/promts.md). Plain transactional writes
+(control_plane has no tenant_id/RLS/sync); license mutations also emit a `cp_outbox` push so
+the change can reach the owning node (docs/08). Analytics compute on-the-fly — no new tables.
+
+| Component | File(s) | Status |
+|---|---|---|
+| Migration: `license` status SM (+auto_renew/cancel_at_period_end/cancelled_at/superseded_by, backfill from `revoked`); `payment_proof.clarification_note`; `plan_catalog.annual_price/status`; `school_registration.reminded_at` | `db/cpmigrations/00004_platform_v2.sql` | ✅ applied |
+| Registration analytics + funnel + Send-Reminder | `internal/features/registration/platform_v2.go` | ✅ |
+| Payment-proof clarification (INFO_REQUESTED + note → public poll) + verification analytics | same | ✅ |
+| License lifecycle: suspend/resume (revoked mirror), cancel (immediate \| end-of-cycle), extend/change-plan (**re-sign** via `license.Sign`, supersede) + `cp_outbox` push | same | ✅ |
+| Subscriptions analytics (MRR per-cycle-normalized, ARR, churn, trends, popularity) + plan CRUD (create/update/duplicate/archive) | same | ✅ |
+| Tenant enrichment (plan+license+users+subscription join), suspend/resume cascade, billing history | same | ✅ |
+| Composed dashboard endpoint | same | ✅ |
+| Node wiring (`RegisterPlatformV2` mounted in the platform-gated group) | `cmd/controlplane/main.go` | ✅ |
+| Integration tests (live PG): license suspend-mirror + extend re-sign-verifies + cp_outbox push; clarification flips status + public poll + settled no-op; plan archive hides from catalog; analytics aggregates (MRR×12=ARR, enriched tenant) | `internal/features/registration/platform_v2_integration_test.go` | ✅ pass |
+
+**Frontend (`web/platform/`) — ✅ built.** Recharts chart kit (`web/src/shared/ui/charts.tsx`:
+FunnelChart/TrendChart/BarSeries/DonutChart/DotChart on design tokens) + `+danger` Badge tone;
+grouped sidebar (Dashboard · TENANTS · BILLING · INSIGHTS); new **Plans & Prices** page; and
+rebuilt Dashboard/Registrations/PaymentProofs/Licenses/Subscriptions/Tenants pages wired to a
+shared `platform/src/shared/platformApi.ts` hook surface. `tsc -b` + `vite build` +
+`build:platform` clean.
+**Carried-forward:** v2 endpoints use the SPA's manual `api.ts` client (matching the existing
+platform pages) — promoting them into `controlplane.yaml` + the generated client is a doc
+follow-up. **Deferred:** M10 dynamic onboarding template, M11 Login-As/magic-link/plan-
+versioning/KYC/AutoPay, M12 Support tickets + AI chatbot.
+
+## Backend — `server/` (M10 Dynamic onboarding template) — ✅ verified
+
+A School Admin tailors the people-onboarding forms without a code change (docs/06,
+docs/database/03-tenant-setup.md). Field-toggle model (not arbitrary columns): each
+`field_key` maps to an existing OnboardInput field; config governs the form + required-ness.
+
+| Component | File(s) | Status |
+|---|---|---|
+| Migration: `onboarding_field_config` + `dropdown_option` (tenant-scoped + RLS + sync cols) | `db/migrations/00013_onboarding_template.sql` | ✅ applied |
+| Service + default catalog + seed (Get/Set template, list/upsert/delete dropdowns) — part of the `access` slice | `internal/features/access/tenantsetup.go` | ✅ golden rule per save |
+| Endpoints: `GET /access/onboarding-template/{type}` (ungated; defaults fallback), `PUT` (tenant.settings); `GET/POST/DELETE /access/dropdowns` | `internal/features/access/access.go` | ✅ |
+| Engine `MissingRequiredFields` + students/teachers/staff `Onboard` enforce visible+required | `internal/platform/onboarding/onboarding.go`, `internal/features/{students,teachers,staff}` | ✅ |
+| Seed defaults at provisioning + dev boot (idempotent) | `internal/features/registration/registration.go`, `cmd/node/main.go` | ✅ |
+| Integration tests (live PG): template seed+save golden rule + non-configurable rejected; engine required enforcement; dropdown upsert-in-place + RLS + soft-delete | `internal/features/access/tenantsetup_integration_test.go` | ✅ pass |
+
+**Frontend (`web/`) — ✅ built.** Admin **Onboarding Forms** page (per-type visible/required/
+label editor) + **Dynamic Dropdowns** page rewired to real CRUD (`features/admin/`); student/
+teacher/staff onboard forms render from the template (hide non-visible, mark + client-validate
+required, dropdown-backed selects). `tsc -b` + `vite build` clean.
+**Carried-forward:** GUARDIAN onboarding template (no form yet); M9/M10 endpoints use the
+manual API clients (OpenAPI promotion is a doc follow-up).
+
+## Backend — `server/` (M11 Login-As/Magic-Link/Plan-Versioning/KYC/AutoPay) — 🟡 built, live-verify pending
+
+The five deferred platform features (docs/promts.md), each a vertical slice. Control-plane
+writes are plain transactional (no tenant_id/RLS/sync); tenant-plane writes follow the golden
+rule. Cross-plane: Login-As mints a node token (shared `JWT_SECRET`), Magic-Link writes a
+tenant-plane token at provisioning.
+
+| Component | File(s) | Status |
+|---|---|---|
+| **A** KYC/Risk/Source: `school_registration` enrichment; risk auto-scored at register; superadmin KYC verify/reject + analytics | `db/cpmigrations/00006_registration_kyc.sql`, `internal/features/registration/{registration.go,platform_m11.go}` | ✅ built |
+| **B** Login-As: tenant-consent flag + toggle (golden rule); `IssueImpersonation` + `imp` claim; `login-as` mints scoped 30-min token; `cp_audit_log` | `db/migrations/00014_superadmin_access.sql`, `db/cpmigrations/00007_cp_audit.sql`, `internal/platform/auth/jwt.go`, `internal/platform/httpx/auth.go`, `internal/features/access/tenantsetup.go`, `internal/features/registration/impersonation.go` | ✅ built |
+| **C** Magic Link: one-time `activation_token` (+ `auth_activation` SECURITY DEFINER); minted at provisioning; node `POST /auth/activate` single-use | `db/migrations/00015_activation_token.sql`, `internal/platform/credential/credential.go`, `internal/features/identity/identity.go`, `internal/features/registration/registration.go` | ✅ built |
+| **D** Plan versioning: `plan_version` chain + `subscription.plan_version_id` pin (grandfathering); version CRUD + per-version counts; catalog roll-forward; backfill + boot ensure | `db/cpmigrations/00008_plan_versions.sql`, `internal/features/registration/{plan_versions.go,platform_v2.go}` | ✅ built |
+| **E** AutoPay: `subscription` autopay cols; toggle + adoption/failed/renewal analytics; on enriched tenant row | `db/cpmigrations/00009_autopay.sql`, `internal/features/registration/{autopay.go,platform_v2.go}` | ✅ built |
+| Node wiring (`RegisterPlatformM11`/`Impersonation`/`PlanVersions`/`AutoPay`, `nodeTokens`, `EnsurePlanVersions`) | `cmd/controlplane/main.go` | ✅ |
+| Integration tests (5): risk+KYC; consent-gated login-as token+audit; magic-link single-use; plan grandfathering; autopay analytics | `internal/features/registration/*_integration_test.go` | 🟡 written, **not yet run live** |
+
+**Frontend (`web/platform/` + `web/`) — ✅ built & typecheck/build-clean.** Platform SPA wired
+via the manual `platformApi.ts` hook surface: Registrations KYC/risk/source columns + KYC
+verify + magic-link at approval; Tenants **Login As** + AutoPay toggle; Subscriptions AutoPay
+cards; Plans version-history panel + new-version form. Tenant app: super-admin-access consent
+toggle (`access/superadmin-access`) + public **/activate** page (magic-link + `#login-as=` hash
+handoff). `tsc -b` + `vite build` + `build:platform` all EXIT 0.
+
+**Verification status.** `go build`/`go vet -tags=integration`/`gofmt` clean module-wide; both
+web apps typecheck + build clean. **DB-free `go test ./...` green**, incl. **2 new unit tests
+that DO run** — `auth.IssueImpersonation` (token parses as a node token, carries the `imp`
+claim, <1h expiry, no must-reset) and `credential.ActivationToken`/`HashToken` (hash=sha256(raw),
+single-use-distinct). **NOT yet done:** the live integration run (`./ved.sh test`)
++ live HTTP smoke — blocked this session because port 5432 was held by an unrelated container
+(`employee-tracker-db`), so the dev Postgres couldn't bind. **To close M11:** free 5432, run
+`./ved.sh test ./internal/features/registration/... ./internal/features/identity/...` (expect
+the 5 new tests green) + a live curl smoke (register→risk, set consent→login-as token,
+activate→login, create plan version→grandfathered, toggle autopay).
 
 ## Frontend — `web/` (M0) — 🟡 architecture scaffolded
 

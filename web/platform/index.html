@@ -4,8 +4,50 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>VED Platform</title>
+    <!-- Boot preloader: inlined so it paints before the JS/CSS bundle loads (no blank
+         screen). main.tsx fades it out the moment React mounts. For a light splash that
+         matches the app canvas, change #app-preloader background to #f4f6f8. -->
+    <style>
+      #app-preloader {
+        position: fixed; inset: 0; z-index: 9999;
+        display: flex; align-items: center; justify-content: center;
+        background: #161c24; opacity: 1; visibility: visible;
+        transition: opacity .4s cubic-bezier(.4, 0, .2, 1), visibility .4s;
+      }
+      #app-preloader.ved-pl--hidden { opacity: 0; visibility: hidden; }
+      #app-preloader .ved-pl-wrap {
+        position: relative; width: 120px; height: 120px;
+        display: flex; align-items: center; justify-content: center;
+      }
+      #app-preloader .ved-pl-logo { width: 52px; height: 52px; z-index: 2; animation: vedPlPulse 2.4s ease-in-out infinite; }
+      #app-preloader .ved-pl-ring { position: absolute; border-radius: 50%; border: 3px solid transparent; z-index: 1; }
+      #app-preloader .ved-pl-ring--outer { width: 100px; height: 100px; border-width: 3px; border-top-color: rgba(0, 167, 111, .24); animation: vedPlSpin 1.2s linear infinite; }
+      #app-preloader .ved-pl-ring--inner { width: 80px; height: 80px; border-width: 4px; border-top-color: rgba(0, 167, 111, .85); animation: vedPlSpinRev 1.2s linear infinite; }
+      @keyframes vedPlPulse { 0%, 100% { transform: scale(.9); opacity: .4; } 50% { transform: scale(1.1); opacity: 1; } }
+      @keyframes vedPlSpin { to { transform: rotate(360deg); } }
+      @keyframes vedPlSpinRev { to { transform: rotate(-360deg); } }
+      @media (prefers-reduced-motion: reduce) {
+        #app-preloader .ved-pl-logo, #app-preloader .ved-pl-ring { animation: none; }
+      }
+    </style>
   </head>
   <body>
+    <div id="app-preloader" role="status" aria-label="Loading VED Platform">
+      <div class="ved-pl-wrap">
+        <svg class="ved-pl-logo" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="vedPlGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#00A76F" />
+              <stop offset="100%" stop-color="#00B894" />
+            </linearGradient>
+          </defs>
+          <path d="M64 96 C64 75 85 64 105 72 L256 380 L130 430 C100 440 75 410 70 380 Z" fill="url(#vedPlGrad)" />
+          <path d="M448 96 C448 75 427 64 407 72 L256 380 L382 430 C412 440 437 410 442 380 Z" fill="url(#vedPlGrad)" />
+        </svg>
+        <div class="ved-pl-ring ved-pl-ring--outer"></div>
+        <div class="ved-pl-ring ved-pl-ring--inner"></div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

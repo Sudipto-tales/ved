@@ -1,0 +1,191 @@
+# VED tenant-node API — the frozen contract (bridges.md §1). The single source of
+# truth: Orval generates the TS client + Zod schemas from this; Go handlers mirror it.
+#
+# Structure: this root holds info/servers/security + shared components (common.yaml);
+# each slice lives in paths/<slice>.yaml and is pulled in below via $ref. Add a slice
+# by dropping a paths/<slice>.yaml and listing its operations here.
+#
+# Regenerate the TS client:  (web/) npm run gen:api
+openapi: 3.1.0
+info:
+  title: VED Tenant Node API
+  version: 1.0.0
+  description: >
+    Per-school tenant-plane API. Every route is authenticated (Bearer JWT) and
+    tenant-scoped (X-Tenant-ID or X-Tenant-Slug → RLS). Permissions are enforced
+    by authz.Require per route (docs/05).
+servers:
+  - url: /
+    description: Same-origin (subdomain host sends X-Tenant-Slug)
+  - url: http://localhost:8080
+    description: Dev node (bare host sends X-Tenant-ID)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: students
+    description: Admissions, roster, and the guardian directory (M3 reference slice).
+  - name: teachers
+    description: Teaching-staff onboarding and roster (M5).
+  - name: staff
+    description: Non-teaching staff onboarding and roster (M5).
+  - name: access
+    description: RBAC — roles, designations, member-role assignment, tenant-setup reads (M2).
+  - name: finance
+    description: Append-only fee ledger — fee heads, invoices (DEBIT), payments (CREDIT), derived outstanding (M5).
+  - name: academics
+    description: Structure (program→stage→subject→section→enrollment→exam) + append-only attendance & marks (M5).
+  - name: learning
+    description: LMS — assignments, materials, append-only submissions & grading → marks ledger (M8).
+  - name: identity
+    description: Auth — login/refresh (public) + me/memberships + reset-password (M1).
+  - name: guardian
+    description: Child-scoped portal over students/academics/finance (M7).
+  - name: search
+    description: Permission-scoped global search across tenant entities (navbar command palette).
+  - name: support
+    description: School-side support tickets — raise a request and exchange messages with the platform.
+
+paths:
+  /api/v1/students/onboard:
+    $ref: './paths/students.yaml#/StudentOnboard'
+  /api/v1/students/guardians/{id}/promote:
+    $ref: './paths/students.yaml#/PromoteGuardian'
+  /api/v1/students:
+    $ref: './paths/students.yaml#/StudentList'
+  /api/v1/students/guardians:
+    $ref: './paths/students.yaml#/GuardianList'
+  /api/v1/students/guardians/{id}:
+    $ref: './paths/students.yaml#/GuardianDetail'
+  /api/v1/students/{id}:
+    $ref: './paths/students.yaml#/StudentDetail'
+
+  /api/v1/teachers/onboard:
+    $ref: './paths/teachers.yaml#/TeacherOnboard'
+  /api/v1/teachers:
+    $ref: './paths/teachers.yaml#/TeacherList'
+  /api/v1/teachers/{id}:
+    $ref: './paths/teachers.yaml#/TeacherDetail'
+
+  /api/v1/staff/onboard:
+    $ref: './paths/staff.yaml#/StaffOnboard'
+  /api/v1/staff:
+    $ref: './paths/staff.yaml#/StaffList'
+  /api/v1/staff/{id}:
+    $ref: './paths/staff.yaml#/StaffDetail'
+
+  /api/v1/me/permissions:
+    $ref: './paths/access.yaml#/MePermissions'
+  /api/v1/access/permissions:
+    $ref: './paths/access.yaml#/PermissionCatalog'
+  /api/v1/access/roles:
+    $ref: './paths/access.yaml#/Roles'
+  /api/v1/access/roles/{id}:
+    $ref: './paths/access.yaml#/RoleByID'
+  /api/v1/access/designations:
+    $ref: './paths/access.yaml#/Designations'
+  /api/v1/access/members:
+    $ref: './paths/access.yaml#/Members'
+  /api/v1/access/members/{id}/roles:
+    $ref: './paths/access.yaml#/MemberRoles'
+  /api/v1/access/profile:
+    $ref: './paths/access.yaml#/TenantProfile'
+  /api/v1/access/academic-years:
+    $ref: './paths/access.yaml#/AcademicYears'
+
+  /api/v1/finance/fee-heads:
+    $ref: './paths/finance.yaml#/FeeHeads'
+  /api/v1/finance/invoices:
+    $ref: './paths/finance.yaml#/Invoices'
+  /api/v1/finance/payments:
+    $ref: './paths/finance.yaml#/Payments'
+  /api/v1/finance/payments/{id}/void:
+    $ref: './paths/finance.yaml#/VoidPayment'
+  /api/v1/finance/students/{id}/ledger:
+    $ref: './paths/finance.yaml#/StudentLedger'
+
+  /api/v1/academics/programs:
+    $ref: './paths/academics.yaml#/Programs'
+  /api/v1/academics/programs/{id}/stages:
+    $ref: './paths/academics.yaml#/ProgramStages'
+  /api/v1/academics/program-stages:
+    $ref: './paths/academics.yaml#/AllStages'
+  /api/v1/academics/subjects:
+    $ref: './paths/academics.yaml#/Subjects'
+  /api/v1/academics/sections:
+    $ref: './paths/academics.yaml#/Sections'
+  /api/v1/academics/sections/{id}/enrollments:
+    $ref: './paths/academics.yaml#/SectionEnrollments'
+  /api/v1/academics/sections/{id}/enroll:
+    $ref: './paths/academics.yaml#/SectionEnroll'
+  /api/v1/academics/teaching-assignments:
+    $ref: './paths/academics.yaml#/TeachingAssignments'
+  /api/v1/academics/exams:
+    $ref: './paths/academics.yaml#/Exams'
+  /api/v1/academics/curriculum:
+    $ref: './paths/academics.yaml#/Curriculum'
+  /api/v1/academics/attendance:
+    $ref: './paths/academics.yaml#/Attendance'
+  /api/v1/academics/attendance/summary:
+    $ref: './paths/academics.yaml#/AttendanceSummary'
+  /api/v1/academics/marks:
+    $ref: './paths/academics.yaml#/Marks'
+  /api/v1/academics/students/{id}/academics:
+    $ref: './paths/academics.yaml#/StudentAcademics'
+
+  /api/v1/learning/assignments:
+    $ref: './paths/learning.yaml#/Assignments'
+  /api/v1/learning/teaching-assignments/{taId}/assignments:
+    $ref: './paths/learning.yaml#/TeachingAssignmentAssignments'
+  /api/v1/learning/assignments/{id}/materials:
+    $ref: './paths/learning.yaml#/AssignmentMaterials'
+  /api/v1/learning/assignments/{id}/submit:
+    $ref: './paths/learning.yaml#/SubmitAssignment'
+  /api/v1/learning/submissions/{id}/grade:
+    $ref: './paths/learning.yaml#/GradeSubmission'
+  /api/v1/learning/assignments/{id}/submissions:
+    $ref: './paths/learning.yaml#/AssignmentSubmissions'
+
+  /auth/login:
+    $ref: './paths/identity.yaml#/Login'
+  /auth/refresh:
+    $ref: './paths/identity.yaml#/Refresh'
+  /auth/reset-password:
+    $ref: './paths/identity.yaml#/ResetPassword'
+  /api/v1/me/memberships:
+    $ref: './paths/identity.yaml#/MeMemberships'
+
+  /api/v1/guardian/children:
+    $ref: './paths/guardian.yaml#/Children'
+  /api/v1/guardian/children/{childId}/attendance:
+    $ref: './paths/guardian.yaml#/ChildAttendance'
+  /api/v1/guardian/exams:
+    $ref: './paths/guardian.yaml#/GuardianExams'
+  /api/v1/guardian/children/{childId}/marks:
+    $ref: './paths/guardian.yaml#/ChildMarks'
+  /api/v1/guardian/children/{childId}/fees:
+    $ref: './paths/guardian.yaml#/ChildFees'
+  /api/v1/guardian/children/{childId}/pay:
+    $ref: './paths/guardian.yaml#/PayFees'
+  /api/v1/guardian/children/{childId}/leave:
+    $ref: './paths/guardian.yaml#/RequestLeave'
+  /api/v1/guardian/leave-requests:
+    $ref: './paths/guardian.yaml#/MyLeaveRequests'
+  /api/v1/guardian/contact:
+    $ref: './paths/guardian.yaml#/UpdateOwnContact'
+
+  /api/v1/search:
+    $ref: './paths/search.yaml#/GlobalSearch'
+
+  /api/v1/support/tickets:
+    $ref: './paths/support.yaml#/SupportTickets'
+  /api/v1/support/tickets/{id}:
+    $ref: './paths/support.yaml#/SupportTicketDetail'
+  /api/v1/support/tickets/{id}/messages:
+    $ref: './paths/support.yaml#/SupportTicketMessages'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './components/common.yaml#/components/securitySchemes/bearerAuth'

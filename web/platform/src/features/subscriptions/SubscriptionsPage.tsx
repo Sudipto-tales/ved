@@ -1,75 +1,85 @@
-// Subscription Plans & Pricing. The plan catalog is read live (GET /api/v1/plans); plan
-// CRUD has no backend yet, so "New plan" / "Edit" open a DESIGNED SCAFFOLD form that is
-// disabled — wiring lands when a plan-management endpoint exists.
-import { useState } from 'react';
-import { Badge, Button, Card, DataTable, EmptyState, Field, Icon, PageHeader, Select } from '@/shared/ui';
-import { usePlans, type Plan } from './api';
+// Subscriptions — revenue & customer analytics for the platform super-admin. Read-only over
+// GET /api/v1/platform/subscriptions/analytics. License health lives on the Licenses page.
+import { BarSeries, DonutChart, PageHeader, SectionCard, Spinner, StatCard, TrendChart } from '@/shared/ui';
+import { useAutoPayAnalytics, useSubscriptionAnalytics } from '../../shared/platformApi';
+import { PlansPanel } from '../plans/PlansPage';
 
-const TIER_TONE: Record<string, 'neutral' | 'primary' | 'warning'> = { T1: 'primary', T2: 'neutral', T3: 'warning' };
+const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 
-function PlanForm({ plan, onClose }: { plan?: Plan; onClose: () => void }) {
-  return (
-    <Card className="mt-16" style={{ borderColor: 'var(--accent)' }}>
-      <h3 style={{ fontSize: 15, marginBottom: 4 }}>{plan ? `Edit ${plan.name}` : 'New plan'}</h3>
-      <p className="subtle" style={{ fontSize: 12 }}>Scaffold — plan management has no backend endpoint yet, so this form is read-only.</p>
-      <div className="mt-16" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <Field label="Name"><input className="input" defaultValue={plan?.name} disabled placeholder="Standard" /></Field>
-        <Field label="Tier">
-          <Select defaultValue={plan?.tier ?? 'T1'} disabled>
-            <option value="T1">T1</option><option value="T2">T2</option><option value="T3">T3</option>
-          </Select>
-        </Field>
-        <Field label="Price"><input className="input" type="number" defaultValue={plan?.price} disabled placeholder="0" /></Field>
-        <Field label="Currency"><input className="input" defaultValue={plan?.currency ?? 'INR'} disabled /></Field>
-        <Field label="Billing cycle">
-          <Select defaultValue={plan?.billing_cycle ?? 'ANNUAL'} disabled>
-            <option value="MONTHLY">MONTHLY</option><option value="QUARTERLY">QUARTERLY</option><option value="ANNUAL">ANNUAL</option>
-          </Select>
-        </Field>
-        <Field label="Seats"><input className="input" type="number" defaultValue={plan?.seats} disabled placeholder="100" /></Field>
-      </div>
-      <div className="flex gap-8 mt-16">
-        <Button disabled title="No plan-management backend yet">Save</Button>
-        <Button variant="ghost" onClick={onClose}>Cancel</Button>
-      </div>
-    </Card>
-  );
-}
+const KPI_GRID = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 16 } as const;
+const CHARTS_GRID = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 } as const;
 
 export default function SubscriptionsPage() {
-  const { data, isLoading, error } = usePlans();
-  const [form, setForm] = useState<{ plan?: Plan } | null>(null);
-  const rows = data?.plans ?? [];
+  const { data, isLoading, error } = useSubscriptionAnalytics();
+  const autopay = useAutoPayAnalytics();
+  const ap = autopay.data;
 
   return (
-    <div style={{ maxWidth: 920 }}>
-      <PageHeader title="Subscription Plans & Pricing" subtitle="The plan catalog offered to schools at sign-up. Pricing, seats and module entitlements per tier." />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <PageHeader title="Subscriptions" subtitle="Revenue, customers & plan catalog" />
       {error && <p style={{ color: 'var(--danger)' }}>Failed to load: {String(error)}</p>}
 
-      <div className="toolbar mt-16">
-        <span className="grow" style={{ flex: 1 }} />
-        <Button onClick={() => setForm({})}><span className="flex gap-8" style={{ alignItems: 'center' }}><Icon name="layers" size={15} /> New plan</span></Button>
-      </div>
+      {isLoading && <Spinner />}
 
-      {form && <PlanForm plan={form.plan} onClose={() => setForm(null)} />}
+      {!isLoading && data && (
+        <>
+          {/* One consolidated KPI row — the meaningful revenue + customer numbers */}
+          <div style={KPI_GRID}>
+            <StatCard
+              label="MRR"
+              tone="success"
+              icon="wallet"
+              value={inr.format(data.mrr)}
+              delta={{ value: `${Math.abs(data.growth_pct)}%`, dir: data.growth_pct >= 0 ? 'up' : 'down', ctx: 'vs last month' }}
+            />
+            <StatCard label="ARR" tone="primary" icon="chart" value={inr.format(data.arr)} />
+            <StatCard label="Active Tenants" tone="info" icon="building" value={data.active_tenants} />
+            <StatCard label="New Tenants" tone="violet" icon="user-plus" value={data.new_tenants} delta={{ value: `${data.new_tenants}`, dir: 'up', ctx: 'this month' }} />
+            <StatCard label="Churn Rate" tone="danger" icon="chart" value={`${data.churn_rate_pct}%`} />
+          </div>
 
-      <Card className="mt-16">
-        <DataTable<Plan>
-          loading={isLoading}
-          rows={rows}
-          rowKey={(p) => p.id}
-          empty={<EmptyState icon={<Icon name="layers" />} title="No plans" desc="The plan catalog is empty." />}
-          columns={[
-            { header: 'Plan', cell: (p) => <span style={{ fontWeight: 600 }}>{p.name}</span> },
-            { header: 'Tier', cell: (p) => <Badge tone={TIER_TONE[p.tier] ?? 'neutral'}>{p.tier}</Badge> },
-            { header: 'Price', align: 'right', cell: (p) => `${p.currency} ${p.price.toLocaleString()}` },
-            { header: 'Cycle', cell: (p) => p.billing_cycle },
-            { header: 'Seats', align: 'right', cell: (p) => p.seats },
-            { header: 'Modules', cell: (p) => <span className="subtle" style={{ fontSize: 12 }}>{(p.enabled_modules ?? []).length} modules</span> },
-            { header: '', align: 'right', cell: (p) => <Button variant="ghost" onClick={() => setForm({ plan: p })}>Edit</Button> },
-          ]}
-        />
-      </Card>
+          <div style={CHARTS_GRID}>
+            <SectionCard icon="wallet" title="Revenue Trend" subtitle="last 6 months" tone="success">
+              <TrendChart data={data.revenue_trend} height={220} />
+            </SectionCard>
+            <SectionCard icon="chart" title="Subscription Growth" subtitle="net new / month" tone="primary">
+              <BarSeries data={data.subscription_growth} height={220} />
+            </SectionCard>
+            <SectionCard icon="layers" title="Plan Popularity" subtitle="active subscriptions by plan" tone="violet">
+              <DonutChart data={data.plan_popularity} height={220} />
+            </SectionCard>
+          </div>
+        </>
+      )}
+
+      {/* AutoPay — recurring-billing adoption & health (M11) */}
+      <SectionCard icon="wallet" title="AutoPay" subtitle="recurring-billing adoption & health" tone="info">
+        {autopay.error && <p style={{ color: 'var(--danger)' }}>Failed to load: {String(autopay.error)}</p>}
+        <div style={KPI_GRID}>
+          <StatCard
+            label="Adoption"
+            tone="success"
+            icon="wallet"
+            value={autopay.isLoading ? <Spinner /> : ap ? `${ap.adoption_pct}%` : '—'}
+            delta={ap ? { value: `${ap.enabled}/${ap.active_subscriptions}`, dir: 'up', ctx: 'enabled' } : undefined}
+          />
+          <StatCard
+            label="Failed Payments"
+            tone="danger"
+            icon="chart"
+            value={autopay.isLoading ? <Spinner /> : ap ? `${ap.failed_pct}%` : '—'}
+          />
+          <StatCard
+            label="Renewal Success"
+            tone="primary"
+            icon="shield"
+            value={autopay.isLoading ? <Spinner /> : ap ? `${ap.renewal_success_pct}%` : '—'}
+          />
+        </div>
+      </SectionCard>
+
+      {/* Plans & Prices — managed inline here; no separate page */}
+      <PlansPanel />
     </div>
   );
 }
