@@ -171,11 +171,15 @@ export default function LicensesPage() {
       <PageHeader title="Licenses" subtitle="Issued offline-validatable licenses" />
 
       {analytics && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr) minmax(280px, 1.4fr)', gap: 16, alignItems: 'stretch' }}>
-          <StatCard label="Total Licenses" value={analytics.total} tone="violet" icon="shield" />
-          <StatCard label="Active" value={analytics.active} tone="success" icon="shield" />
-          <StatCard label="Expiring This Month" value={analytics.expiring_this_month} tone="warning" icon="bell" />
-          <StatCard label="Cancelled This Month" value={analytics.cancelled_this_month} tone="danger" icon="arrow-left" />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, alignItems: 'stretch' }}>
+          {/* Left half (col 6): the four stat cards as a 2×2 grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <StatCard label="Total Licenses" value={analytics.total} tone="violet" icon="shield" />
+            <StatCard label="Active" value={analytics.active} tone="success" icon="shield" />
+            <StatCard label="Expiring This Month" value={analytics.expiring_this_month} tone="warning" icon="bell" />
+            <StatCard label="Cancelled This Month" value={analytics.cancelled_this_month} tone="danger" icon="arrow-left" />
+          </div>
+          {/* Right half (col 6): License Distribution */}
           <SectionCard icon="chart" title="License Distribution" tone="info">
             <DonutChart data={analytics.distribution} />
           </SectionCard>
