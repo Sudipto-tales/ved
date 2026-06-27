@@ -29,6 +29,7 @@ const ICONS: Record<string, IconName> = {
   communication: 'bell',
   reports: 'chart',
   learning: 'book',
+  support: 'help',
 };
 const iconFor = (path: string): IconName => ICONS[path.split('/')[0]] ?? 'grid';
 

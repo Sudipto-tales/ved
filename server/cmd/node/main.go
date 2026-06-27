@@ -21,6 +21,7 @@ import (
 	"github.com/weloin/ved/internal/features/search"
 	"github.com/weloin/ved/internal/features/staff"
 	"github.com/weloin/ved/internal/features/students"
+	"github.com/weloin/ved/internal/features/support"
 	"github.com/weloin/ved/internal/features/teachers"
 	"github.com/weloin/ved/internal/platform/auth"
 	"github.com/weloin/ved/internal/platform/authz"
@@ -162,6 +163,7 @@ func main() {
 		guardian.Register(g, pool, nodeID, resolver)
 		learning.Register(g, pool, nodeID, resolver)
 		search.Register(g, pool, nodeID, resolver)
+		support.Register(g, pool, nodeID, resolver)
 	})
 
 	if err := httpx.Serve(cfg.HTTPAddr, r); err != nil {

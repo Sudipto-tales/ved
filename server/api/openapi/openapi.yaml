@@ -44,6 +44,8 @@ tags:
     description: Child-scoped portal over students/academics/finance (M7).
   - name: search
     description: Permission-scoped global search across tenant entities (navbar command palette).
+  - name: support
+    description: School-side support tickets — raise a request and exchange messages with the platform.
 
 paths:
   /api/v1/students/onboard:
@@ -175,6 +177,13 @@ paths:
 
   /api/v1/search:
     $ref: './paths/search.yaml#/GlobalSearch'
+
+  /api/v1/support/tickets:
+    $ref: './paths/support.yaml#/SupportTickets'
+  /api/v1/support/tickets/{id}:
+    $ref: './paths/support.yaml#/SupportTicketDetail'
+  /api/v1/support/tickets/{id}/messages:
+    $ref: './paths/support.yaml#/SupportTicketMessages'
 
 components:
   securitySchemes:
