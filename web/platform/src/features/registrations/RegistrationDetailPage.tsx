@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Badge, Button, EmptyState, Icon, PageHeader, SectionCard, Spinner } from '@/shared/ui';
 import { useApprove, useRegistration, useReject, type ApproveResult } from './api';
-import { tenantUrl, useSetKYC } from '../../shared/platformApi';
+import { tenantUrl, useRegistrationFormConfig, useSetKYC } from '../../shared/platformApi';
 
 const KYC_TONE: Record<string, 'success' | 'warning' | 'danger' | 'neutral'> = {
   VERIFIED: 'success',
@@ -42,6 +42,7 @@ export default function RegistrationDetailPage() {
   const approve = useApprove();
   const reject = useReject();
   const setKYC = useSetKYC();
+  const formConfig = useRegistrationFormConfig();
   const [provisioned, setProvisioned] = useState<ApproveResult | null>(null);
 
   const reg = data?.registration;
@@ -49,8 +50,12 @@ export default function RegistrationDetailPage() {
   const kyc = data?.kyc;
   const reviewable = reg?.status === 'PENDING_PAYMENT_REVIEW';
 
+  // Label custom-field answers via the registration-form template (fall back to the key).
+  const labelFor = (key: string) => formConfig.data?.fields.find((f) => f.field_key === key)?.label ?? key;
+  const extras = Object.entries(data?.extra_fields ?? {}).filter(([, v]) => v !== null && v !== '' && v !== undefined);
+
   return (
-    <div style={{ maxWidth: 1100, display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div>
         <Link to="/registrations" className="flex gap-8" style={{ alignItems: 'center', fontSize: 13, marginBottom: 12 }}>
           <Icon name="arrow-left" size={15} /> Registrations
@@ -165,6 +170,19 @@ export default function RegistrationDetailPage() {
             )}
           </SectionCard>
           </div>
+
+          {extras.length > 0 && (
+            <div style={{ gridColumn: '1 / -1' }}>
+              <SectionCard icon="note" title="Custom fields" subtitle="Answers to superadmin-defined registration fields." tone="info">
+                {extras.map(([key, val]) => (
+                  <div className="row" key={key}>
+                    <span className="muted">{labelFor(key)}</span>
+                    <span>{String(val)}</span>
+                  </div>
+                ))}
+              </SectionCard>
+            </div>
+          )}
         </div>
       )}
 

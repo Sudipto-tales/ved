@@ -38,7 +38,11 @@ export type Registration = GenRegistration & {
   source?: string | null;
 };
 export type PaymentProof = Proof;
-export type RegistrationDetail = GenRegistrationDetail & { kyc?: RegistrationKYC | null };
+export type RegistrationDetail = GenRegistrationDetail & {
+  kyc?: RegistrationKYC | null;
+  /** Answers to superadmin-defined custom registration fields, keyed by field_key. */
+  extra_fields?: Record<string, unknown> | null;
+};
 export type ApproveResult = GenApproveResult & { magic_token?: string | null };
 
 const KEY = ['platform', 'registrations'] as const;

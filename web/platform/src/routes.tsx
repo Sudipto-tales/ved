@@ -47,6 +47,18 @@ export const platformPages: PageDef[] = [
     element: () => import('./features/registrations/RegistrationDetailPage'),
   },
   {
+    // The superadmin curates the public signup form — toggle/relabel built-in fields and
+    // add custom fields (docs/06, docs/24). Drives /signup and the review screen.
+    path: 'registration-form',
+    title: 'Registration Form',
+    persona: 'SUPERADMIN',
+    permission: 'platform.registration.review',
+    tier: 'T1',
+    status: 'done',
+    nav: true,
+    element: () => import('./features/registration-form/RegistrationFormPage'),
+  },
+  {
     path: 'payment-proofs',
     title: 'Payment Proofs',
     persona: 'SUPERADMIN',

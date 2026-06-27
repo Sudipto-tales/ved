@@ -38,6 +38,39 @@ export function useRemindRegistration() {
   });
 }
 
+// ── registration-form template (the dynamic signup form) ──────────────────────
+export interface RegFieldOption {
+  label: string;
+  value: string;
+}
+export interface RegField {
+  field_key: string;
+  kind: 'BUILTIN' | 'CUSTOM';
+  field_type: 'TEXT' | 'NUMBER' | 'DATE' | 'EMAIL' | 'PHONE' | 'DROPDOWN' | 'FILE';
+  label: string;
+  help_text: string;
+  visible: boolean;
+  required: boolean;
+  locked: boolean;
+  ordinal: number;
+  options: RegFieldOption[];
+}
+
+export function useRegistrationFormConfig() {
+  return useQuery({
+    queryKey: ['platform', 'registration-form'],
+    queryFn: () => api.get<{ fields: RegField[] }>('/api/v1/platform/registration-form'),
+  });
+}
+
+export function useSaveRegistrationForm() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (fields: RegField[]) => api.put<void>('/api/v1/platform/registration-form', { fields }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['platform', 'registration-form'] }),
+  });
+}
+
 // ── payment proofs ────────────────────────────────────────────────────────────
 export interface PaymentAnalytics {
   pending: number;

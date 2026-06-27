@@ -5,7 +5,42 @@ The single place that records **how far the build has progressed** against the p
 
 **Legend:** ✅ done · 🟡 scaffolded / partial · ⬜ not started
 
-> **YOU ARE HERE:** **M11 (Login-As · Magic-Link · Plan-Versioning · KYC · AutoPay) — backend
+> **YOU ARE HERE:** **Dynamic School-Registration Form (control plane) — backend + frontend
+> complete & live-verified.** The platform superadmin can now curate the public `/signup`
+> form without a code change — the control-plane sibling of M10's dynamic onboarding template
+> (docs/06, docs/24). New cp migration **`cpmigrations/00011_registration_form`** adds a SINGLE
+> GLOBAL **`registration_field_config`** table (no tenant_id/RLS/sync — control-plane
+> convention) + an **`extra_fields` JSONB** on `school_registration`, and seeds the built-ins
+> (`school_name/slug/admin_name/admin_email/plan_id` LOCKED — relabel/reorder only, never
+> hide/un-require; `admin_phone` toggleable; `business_reg/gst` hidden-by-default toggleable
+> built-ins that map to the existing KYC columns). Backend **`registration_form.go`**:
+> `GetRegistrationForm(includeHidden)` + `SaveRegistrationForm` (golden-rule ANALOG — field
+> upserts + **ONE `cp_audit_log`** row, **NO `cp_outbox`** since the template is
+> control-plane-only and never reaches a node; immutable kind/field_type/locked taken from the
+> stored row; custom keys validated as slugs; absent customs hard-deleted). `Register` now loads
+> the live template, **rejects** missing visible+required fields (built-in OR custom) with their
+> labels, and persists recognised **visible** custom answers into `extra_fields`. Handlers:
+> public `GET /api/v1/registration-form` (drives signup) + platform `GET`/`PUT
+> /api/v1/platform/registration-form` (gated `platform.registration.review`). FE (platform SPA,
+> manual client): the signup form **renders from the template** (built-ins keep bespoke widgets;
+> custom fields render by type incl. dropdown; required-validated; posts `extra{}`), a new
+> **Registration Form** editor page under the TENANTS sidebar section (toggle/relabel/reorder
+> built-ins, add/remove custom fields with a dropdown-options editor, locked rows disabled), and
+> the review page shows submitted custom answers. **Verified:** `go build`/`go vet
+> -tags=integration`/`gofmt` clean; platform `tsc -b` + `vite build:platform` clean; **3 new
+> integration tests green** (save golden-rule: one cp_audit_log + zero cp_outbox + locked/
+> dropdown/slug guards; Register enforces required custom field + persists visible / drops hidden
+> answers; public projection visibility + ordering); **live HTTP smoke** on the control-plane
+> binary — public GET built-ins, platform login, unauth PUT → 401, PUT add required custom
+> dropdown → 204, register WITHOUT it → 400 "required field(s): Affiliation board", WITH it →
+> 201 + `extra_fields={"board":"CBSE"}` persisted. _Carried-forward: custom **FILE** fields
+> render as a link/text input for now (MinIO upload path — the payment-proof pattern — is a fast
+> follow-up); endpoints use the manual platform API client (OpenAPI promotion is a doc
+> follow-up, consistent with the M9–M11 slices). Pre-existing `TestMagicLinkActivation` failure
+> (`outbox_op_check` in identity.Activate) is unrelated to this slice — reproduces on the clean
+> branch._
+>
+> **(prev) M11 (Login-As · Magic-Link · Plan-Versioning · KYC · AutoPay) — backend
 > + frontend complete; live DB verification PENDING.** The five deferred super-admin/platform
 > features (docs/promts.md) are built as five vertical slices. **Slice A — KYC/Risk/Source**
 > (`cp/00006`): `school_registration` gains kyc_status/business_reg/gst/notes + risk_score

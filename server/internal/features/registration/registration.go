@@ -94,6 +94,9 @@ type RegisterInput struct {
 	// M11 source tracking — where the request came from. Defaults to DIRECT/WEBSITE.
 	Source       string `json:"source,omitempty"`
 	SourceDetail string `json:"source_detail,omitempty"`
+	// Extra carries answers to superadmin-defined custom fields (keyed by field_key); only
+	// recognised CUSTOM keys are persisted, into school_registration.extra_fields.
+	Extra map[string]any `json:"extra,omitempty"`
 }
 
 type ProofInput struct {
@@ -169,6 +172,46 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (RegistrationD
 		return RegistrationDTO{}, ErrSlugTaken
 	}
 
+	// Dynamic-form enforcement: the superadmin may have made extra built-in fields (e.g.
+	// admin_phone, business_reg) or custom fields visible+required. Reject if any are
+	// missing — the locked core fields are also enforced in code above.
+	form, err := s.GetRegistrationForm(ctx, true)
+	if err != nil {
+		return RegistrationDTO{}, err
+	}
+	present := map[string]bool{
+		"school_name":  in.SchoolName != "",
+		"slug":         in.Slug != "",
+		"admin_name":   in.AdminName != "",
+		"admin_email":  in.AdminEmail != "",
+		"admin_phone":  in.AdminPhone != "",
+		"plan_id":      in.PlanID != "",
+		"business_reg": in.BusinessReg != "",
+		"gst":          in.GST != "",
+	}
+	customKeys := map[string]bool{}
+	for _, f := range form {
+		if f.Kind == "CUSTOM" && f.Visible {
+			customKeys[f.FieldKey] = true
+		}
+	}
+	for k, v := range in.Extra {
+		if !isBlank(v) {
+			present[k] = true
+		}
+	}
+	if missing := missingRegistrationFields(form, present); len(missing) > 0 {
+		return RegistrationDTO{}, fmt.Errorf("%w: required field(s): %s", ErrInvalidInput, strings.Join(missing, ", "))
+	}
+	// Persist only recognised custom answers (keyed by field_key) into extra_fields.
+	extra := map[string]any{}
+	for k, v := range in.Extra {
+		if customKeys[k] && !isBlank(v) {
+			extra[k] = v
+		}
+	}
+	extraJSON, _ := json.Marshal(extra)
+
 	// M11 — triage the request before it hits the review queue.
 	score, factors := s.scoreRisk(ctx, in)
 	factorsJSON, _ := json.Marshal(factors)
@@ -179,11 +222,11 @@ func (s *Service) Register(ctx context.Context, in RegisterInput) (RegistrationD
 	err = s.pool.QueryRow(ctx,
 		`INSERT INTO control_plane.school_registration
 		   (id, school_name, slug, admin_name, admin_email, admin_phone, requested_plan_id, status,
-		    kyc_business_reg, kyc_gst, risk_score, risk_factors, source, source_detail)
-		 VALUES ($1,$2,$3,$4,$5,$6,$7,'ONBOARDING',$8,$9,$10,$11,$12,$13)
+		    kyc_business_reg, kyc_gst, risk_score, risk_factors, source, source_detail, extra_fields)
+		 VALUES ($1,$2,$3,$4,$5,$6,$7,'ONBOARDING',$8,$9,$10,$11,$12,$13,$14)
 		 RETURNING id, school_name, slug, admin_name, admin_email, status, created_at`,
 		id, in.SchoolName, in.Slug, in.AdminName, in.AdminEmail, nullStr(in.AdminPhone), planID,
-		nullStr(in.BusinessReg), nullStr(in.GST), score, factorsJSON, source, nullStr(in.SourceDetail)).
+		nullStr(in.BusinessReg), nullStr(in.GST), score, factorsJSON, source, nullStr(in.SourceDetail), extraJSON).
 		Scan(&dto.ID, &dto.SchoolName, &dto.Slug, &dto.AdminName, &dto.AdminEmail, &dto.Status, &dto.CreatedAt)
 	if isUnique(err, "admin_email") {
 		return RegistrationDTO{}, ErrEmailTaken
@@ -328,6 +371,9 @@ type RegistrationDetail struct {
 	Registration RegistrationDTO `json:"registration"`
 	Proof        *ProofDTO       `json:"proof,omitempty"`
 	KYC          KYCDetail       `json:"kyc"`
+	// ExtraFields holds the answers to superadmin-defined custom fields (keyed by field_key);
+	// the review page labels them via the registration-form template.
+	ExtraFields map[string]any `json:"extra_fields"`
 }
 
 // KYCDetail is the full review payload behind the registration-detail page (M11):
@@ -367,25 +413,29 @@ func (s *Service) Detail(ctx context.Context, regID uuid.UUID) (RegistrationDeta
 	var out RegistrationDetail
 	d := &out.Registration
 	k := &out.KYC
-	var factorsRaw []byte
+	var factorsRaw, extraRaw []byte
 	err := s.pool.QueryRow(ctx,
 		`SELECT id, school_name, slug, admin_name, admin_email, status, tenant_id, created_at,
-		        kyc_status, kyc_business_reg, kyc_gst, kyc_notes, risk_score, risk_factors, source, source_detail,
+		        kyc_status, kyc_business_reg, kyc_gst, kyc_notes, risk_score, risk_factors, source, source_detail, extra_fields,
 		        (SELECT pp.status FROM control_plane.payment_proof pp
 		          WHERE pp.registration_id = school_registration.id ORDER BY pp.created_at DESC LIMIT 1)
 		   FROM control_plane.school_registration WHERE id=$1`, regID).
 		Scan(&d.ID, &d.SchoolName, &d.Slug, &d.AdminName, &d.AdminEmail, &d.Status, &d.TenantID, &d.CreatedAt,
-			&k.Status, &k.BusinessReg, &k.GST, &k.Notes, &k.RiskScore, &factorsRaw, &k.Source, &k.SourceDetail, &d.ProofStatus)
+			&k.Status, &k.BusinessReg, &k.GST, &k.Notes, &k.RiskScore, &factorsRaw, &k.Source, &k.SourceDetail, &extraRaw, &d.ProofStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return RegistrationDetail{}, ErrNotFound
 	}
 	if err != nil {
 		return RegistrationDetail{}, err
 	}
-	// Mirror the queue signals onto the registration DTO, and decode risk factors.
+	// Mirror the queue signals onto the registration DTO, and decode risk factors + extras.
 	d.KYCStatus, d.RiskScore, d.Source = k.Status, k.RiskScore, k.Source
 	k.RiskFactors = []string{}
 	_ = json.Unmarshal(factorsRaw, &k.RiskFactors)
+	out.ExtraFields = map[string]any{}
+	if len(extraRaw) > 0 {
+		_ = json.Unmarshal(extraRaw, &out.ExtraFields)
+	}
 
 	var p ProofDTO
 	err = s.pool.QueryRow(ctx,
@@ -733,6 +783,17 @@ func RegisterPublic(r chi.Router, svc *Service) {
 		httpx.JSON(w, http.StatusOK, map[string]any{"plans": out})
 	})
 
+	// Public projection of the registration-form template — drives the signup form
+	// (which fields to render, their labels, types, options, and required markers).
+	r.Get("/api/v1/registration-form", func(w http.ResponseWriter, req *http.Request) {
+		fields, err := svc.GetRegistrationForm(req.Context(), false)
+		if err != nil {
+			httpx.Error(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"fields": fields})
+	})
+
 	// Public read of a registration's status (signup site polls this).
 	r.Get("/api/v1/registrations/{id}", func(w http.ResponseWriter, req *http.Request) {
 		id, err := uuid.Parse(chi.URLParam(req, "id"))
@@ -817,6 +878,35 @@ func RegisterPlatform(r chi.Router, svc *Service) {
 				return
 			}
 			httpx.JSON(w, http.StatusOK, detail)
+		})
+
+	// Registration-form editor — the superadmin curates which fields the signup form
+	// collects (toggle/relabel built-ins, add/remove custom fields).
+	r.With(platform.RequirePermission(platform.PermRegistrationReview)).
+		Get("/api/v1/platform/registration-form", func(w http.ResponseWriter, req *http.Request) {
+			fields, err := svc.GetRegistrationForm(req.Context(), true)
+			if err != nil {
+				httpx.Error(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			httpx.JSON(w, http.StatusOK, map[string]any{"fields": fields})
+		})
+
+	r.With(platform.RequirePermission(platform.PermRegistrationReview)).
+		Put("/api/v1/platform/registration-form", func(w http.ResponseWriter, req *http.Request) {
+			var in struct {
+				Fields []FieldDef `json:"fields"`
+			}
+			if err := json.NewDecoder(req.Body).Decode(&in); err != nil {
+				httpx.Error(w, http.StatusBadRequest, "invalid JSON")
+				return
+			}
+			ident, _ := platform.IdentityFrom(req.Context())
+			if err := svc.SaveRegistrationForm(req.Context(), ident.AdminID, in.Fields); err != nil {
+				writeErr(w, err)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
 		})
 
 	r.With(platform.RequirePermission(platform.PermPaymentReview)).
@@ -981,7 +1071,7 @@ func writeErr(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		httpx.Error(w, http.StatusNotFound, "not found")
-	case errors.Is(err, ErrBadSlug), errors.Is(err, ErrInvalidInput):
+	case errors.Is(err, ErrBadSlug), errors.Is(err, ErrInvalidInput), errors.Is(err, ErrLockedField):
 		httpx.Error(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, ErrSlugTaken), errors.Is(err, ErrReservedSlug), errors.Is(err, ErrEmailTaken):
 		httpx.Error(w, http.StatusConflict, err.Error())
