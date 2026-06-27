@@ -220,6 +220,95 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '500': { $ref: '#/components/responses/Internal' }
 
+  /api/v1/platform/support/analytics:
+    get:
+      operationId: supportAnalytics
+      summary: Support queue counts (open / pending / resolved)
+      tags: [platform]
+      responses:
+        '200': { description: Counts., content: { application/json: { schema: { $ref: '#/components/schemas/SupportAnalytics' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /api/v1/platform/support/tickets:
+    get:
+      operationId: listSupportTickets
+      summary: List support tickets (optionally filtered by status)
+      tags: [platform]
+      parameters:
+        - { name: status, in: query, required: false, description: "open | pending | resolved | all", schema: { type: string } }
+      responses:
+        '200':
+          description: Tickets, newest-active first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [tickets]
+                properties:
+                  tickets: { type: array, items: { $ref: '#/components/schemas/SupportTicket' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+    post:
+      operationId: createSupportTicket
+      summary: Open a ticket (log one on a school's behalf)
+      tags: [platform]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CreateTicketInput' } } } }
+      responses:
+        '201': { description: Created ticket + first message., content: { application/json: { schema: { $ref: '#/components/schemas/SupportThread' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /api/v1/platform/support/tickets/{id}:
+    get:
+      operationId: getSupportThread
+      summary: One ticket with its full message thread
+      tags: [platform]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Ticket + ordered messages., content: { application/json: { schema: { $ref: '#/components/schemas/SupportThread' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /api/v1/platform/support/tickets/{id}/reply:
+    post:
+      operationId: replySupportTicket
+      summary: Append a platform reply to a ticket
+      tags: [platform]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [body], properties: { body: { type: string } } } } } }
+      responses:
+        '201': { description: Updated thread., content: { application/json: { schema: { $ref: '#/components/schemas/SupportThread' } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
+  /api/v1/platform/support/tickets/{id}/status:
+    post:
+      operationId: setSupportTicketStatus
+      summary: Change a ticket's status
+      tags: [platform]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [status], properties: { status: { type: string, enum: [open, pending, resolved] } } } } } }
+      responses:
+        '200': { description: OK., content: { application/json: { schema: { type: object, properties: { ok: { type: boolean } } } } } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '500': { $ref: '#/components/responses/Internal' }
+
 components:
   securitySchemes:
     platformBearer:
@@ -260,6 +349,56 @@ components:
           additionalProperties:
             type: array
             items: { $ref: '#/components/schemas/PlatformSearchHit' }
+
+    SupportAnalytics:
+      type: object
+      required: [open, pending, resolved]
+      properties:
+        open: { type: integer }
+        pending: { type: integer }
+        resolved: { type: integer }
+
+    SupportTicket:
+      type: object
+      required: [id, school_name, subject, priority, status, last_message_at, created_at, message_count]
+      properties:
+        id: { type: string, format: uuid }
+        tenant_id: { type: string, format: uuid, nullable: true }
+        school_name: { type: string }
+        subject: { type: string }
+        priority: { type: string, enum: [low, normal, high] }
+        status: { type: string, enum: [open, pending, resolved] }
+        last_message_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        message_count: { type: integer }
+
+    SupportMessage:
+      type: object
+      required: [id, ticket_id, author_type, author_name, body, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        ticket_id: { type: string, format: uuid }
+        author_type: { type: string, enum: [SCHOOL, PLATFORM] }
+        author_name: { type: string }
+        body: { type: string }
+        created_at: { type: string, format: date-time }
+
+    SupportThread:
+      type: object
+      required: [ticket, messages]
+      properties:
+        ticket: { $ref: '#/components/schemas/SupportTicket' }
+        messages: { type: array, items: { $ref: '#/components/schemas/SupportMessage' } }
+
+    CreateTicketInput:
+      type: object
+      required: [subject, body]
+      properties:
+        tenant_id: { type: string, format: uuid }
+        school_name: { type: string }
+        subject: { type: string }
+        priority: { type: string, enum: [low, normal, high] }
+        body: { type: string }
 
     Plan:
       type: object

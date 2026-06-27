@@ -120,6 +120,16 @@ export const platformPages: PageDef[] = [
     nav: true,
     element: () => import('./features/support/SupportPage'),
   },
+  {
+    // One ticket: full message thread + reply + status controls.
+    path: 'support/:id',
+    title: 'Support Ticket',
+    persona: 'SUPERADMIN',
+    permission: 'platform.support.manage',
+    tier: 'T3',
+    status: 'done',
+    element: () => import('./features/support/SupportDetailPage'),
+  },
 
   // ── System: app distribution + platform configuration
   {

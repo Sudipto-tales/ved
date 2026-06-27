@@ -451,3 +451,85 @@ export function tenantUrl(slug: string, admin = false): string {
   const sub = admin ? `${slug}-admin` : slug;
   return `${proto}//${sub}.${base}`;
 }
+
+// ── support tickets ──────────────────────────────────────────────────────────
+// Console backend (server/internal/features/registration/platform_support.go).
+export interface SupportTicket {
+  id: string;
+  tenant_id?: string | null;
+  school_name: string;
+  subject: string;
+  priority: 'low' | 'normal' | 'high';
+  status: 'open' | 'pending' | 'resolved';
+  last_message_at: string;
+  created_at: string;
+  message_count: number;
+}
+export interface SupportMessage {
+  id: string;
+  ticket_id: string;
+  author_type: 'SCHOOL' | 'PLATFORM';
+  author_name: string;
+  body: string;
+  created_at: string;
+}
+export interface SupportThread {
+  ticket: SupportTicket;
+  messages: SupportMessage[];
+}
+export interface SupportAnalytics {
+  open: number;
+  pending: number;
+  resolved: number;
+}
+
+export function useSupportAnalytics() {
+  return useQuery({
+    queryKey: ['platform', 'support', 'analytics'],
+    queryFn: () => api.get<SupportAnalytics>('/api/v1/platform/support/analytics'),
+  });
+}
+
+export function useSupportTickets(status: string) {
+  return useQuery({
+    queryKey: ['platform', 'support', 'tickets', status],
+    queryFn: () =>
+      api.get<{ tickets: SupportTicket[] }>(
+        `/api/v1/platform/support/tickets${status && status !== 'all' ? `?status=${status}` : ''}`,
+      ),
+  });
+}
+
+export function useSupportThread(id: string) {
+  return useQuery({
+    queryKey: ['platform', 'support', 'ticket', id],
+    queryFn: () => api.get<SupportThread>(`/api/v1/platform/support/tickets/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useCreateTicket() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { tenant_id?: string; school_name?: string; subject: string; priority?: string; body: string }) =>
+      api.post<SupportThread>('/api/v1/platform/support/tickets', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['platform', 'support'] }),
+  });
+}
+
+export function useReplyTicket(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: string) => api.post<SupportThread>(`/api/v1/platform/support/tickets/${id}/reply`, { body }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['platform', 'support'] }),
+  });
+}
+
+export function useSetTicketStatus(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (status: 'open' | 'pending' | 'resolved') =>
+      api.post<{ ok: boolean }>(`/api/v1/platform/support/tickets/${id}/status`, { status }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['platform', 'support'] }),
+  });
+}

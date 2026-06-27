@@ -111,6 +111,7 @@ func main() {
 		registration.RegisterPlatformPlanVersions(g, regSvc)              // M11: plan versioning / grandfathered pricing
 		registration.RegisterPlatformAutoPay(g, regSvc)                   // M11: AutoPay toggle + analytics
 		registration.RegisterPlatformSearch(g, regSvc)                    // global search (navbar command palette)
+		registration.RegisterPlatformSupport(g, regSvc)                   // support ticketing console
 		registration.RegisterSettingsReleases(g, r, regSvc)               // settings store + app-releases registry (+ public /releases)
 	})
 
