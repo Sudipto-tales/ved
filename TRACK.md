@@ -5,7 +5,37 @@ The single place that records **how far the build has progressed** against the p
 
 **Legend:** ✅ done · 🟡 scaffolded / partial · ⬜ not started
 
-> **YOU ARE HERE:** **Post-login identity in the tenant shell — school name + welcome +
+> **YOU ARE HERE:** **BUGFIX — subdomain tenant context never set, so admins on
+> `{slug}.ved.test` could not create students (or do any permission-gated action).** Root
+> cause (frontend, found by driving the whole platform→school flow over HTTP): on a
+> `{slug}.ved.*` subdomain the post-login flow (`useAuthFlow`) navigates to `/` but never
+> calls `setTenant`, and `TenantProvider.activeTenantId` was sourced ONLY from the
+> localhost picker's `localStorage`. So on every real school subdomain `activeTenantId`
+> stayed `null` → `useSyncPermissions` (gated on `activeTenantId`) never fetched
+> `/me/permissions` → permissions stayed `[]` → every `<Can>`/`PermissionGuard` failed
+> closed → the **"Onboard student"** button (and all admin actions) vanished, plus persona
+> + sidebar-brand fell back wrongly. The localhost/dev path worked only because
+> `tenantSlug` is null there, so it fell through to `setTenant(memberships[0].tenant_id)`.
+> **Fix:** `TenantProvider` now derives `activeTenantId` on a subdomain from the membership
+> whose `slug` matches the host (or the sole membership for older sessions without the slug
+> field), so the bare-host picker path is unchanged but the subdomain path resolves the
+> tenant id — fixing permission-sync, persona routing, and the brand in one place; covers
+> fresh login, refresh, and pre-existing sessions (memberships are read synchronously from
+> localStorage, and `AuthProvider` wraps `TenantProvider` so `useAuth()` is available).
+> **Verified:** the ENTIRE backend flow is healthy end-to-end (live HTTP on the running
+> stack) — platform login → register → payment-proof → approve+provision → new-admin login
+> (via nginx + `X-Tenant-Slug`) → onboarding-template/dropdowns/roles all seeded →
+> **`POST /students/onboard` returns 201** (direct, nginx, and slug paths) → student in
+> roster; `/me/permissions` for the provisioned admin includes `student.onboard`. So the
+> bug was purely the FE tenant-context seam. `tsc -b` + `vite build` clean; fix rebuilt
+> into the running `web` container and confirmed served. _Also surfaced (environment, not
+> code): `*.ved.test` has no wildcard DNS here — `/etc/hosts` lists only a few slugs and
+> dnsmasq (`deploy/dnsmasq/ved-test.conf`, docs/25 §6) isn't active, so a freshly-registered
+> school's subdomain won't resolve in the browser until added. Carried-forward: not yet
+> browser-smoked (the sandbox can't hold a headless-Chrome debug session); recommend a
+> click-through on a resolvable school subdomain to confirm the Onboard button now appears._
+>
+> **(prev) Post-login identity in the tenant shell — school name + welcome +
 > account chip (backend + frontend), live-verified.** Two fixes shipped together. (1)
 > **Removed the dead `{slug}-admin` subdomain structure** — the tenant admin uses the SAME
 > `{slug}.ved.test` door as every other role (the login identifier, not the address, picks
