@@ -7,7 +7,7 @@ export default function LedgerIndexPage() {
   const { data, isLoading, error } = useStudents();
 
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div>
       <PageHeader title="Student Ledger" subtitle="Append-only, event-sourced fee ledger. Outstanding is always derived (Σ debit − Σ credit), never stored." />
       <Card className="mt-16">
         {isLoading && <Spinner />}

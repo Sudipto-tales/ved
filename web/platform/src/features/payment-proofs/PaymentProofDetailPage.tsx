@@ -27,7 +27,7 @@ export default function PaymentProofDetailPage() {
   const clarificationNote = (proof as any)?.clarification_note as string | undefined;
 
   return (
-    <div style={{ maxWidth: 1100, display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       <div>
         <Link to="/payment-proofs" className="flex gap-8" style={{ alignItems: 'center', fontSize: 13, marginBottom: 12 }}>
           <Icon name="arrow-left" size={15} /> Payment Proofs

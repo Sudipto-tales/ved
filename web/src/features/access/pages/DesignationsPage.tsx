@@ -53,7 +53,7 @@ export default function DesignationsPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div>
       <PageHeader
         title="Designations"
         subtitle="Job-title labels assignable to members. Optionally scope a designation to one user type."

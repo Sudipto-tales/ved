@@ -104,7 +104,7 @@ export default function ImportStudentsPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 920 }}>
+    <div>
       <PageHeader
         title="Bulk import students"
         subtitle="Upload a CSV of admissions. Each row will be onboarded — login, membership, profile, and guardian links — in one transaction per student."

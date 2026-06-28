@@ -7,7 +7,7 @@ import { Button, Card, EmptyState, Icon, PageHeader } from '@/shared/ui';
 
 export default function MyAssignmentsPage() {
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <PageHeader
         title="My Assignments"
         subtitle="Assignments set for your class, with due dates and submission status."

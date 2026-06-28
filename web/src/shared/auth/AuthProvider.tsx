@@ -6,23 +6,31 @@
 // read this set; the server's requirePermission remains authoritative.
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { STORAGE } from '@/shared/lib/storage';
+import { useTenant } from '@/shared/tenant/TenantProvider';
 
 export interface Membership {
   membership_id: string;
   tenant_id: string;
   user_type: string;
+  /** School/college display name + slug — drive the sidebar brand + welcome (docs/24). */
+  tenant_name?: string;
+  slug?: string;
 }
 
 export interface Session {
   accessToken: string;
   refreshToken: string;
   mustReset: boolean;
+  /** The signed-in user's login handle (account chip); survives reload via localStorage. */
+  login?: string;
   memberships: Membership[];
 }
 
 interface AuthState {
   token: string | null;
   memberships: Membership[];
+  /** The signed-in user's login handle, or null on an older/odd-path session. */
+  loginHandle: string | null;
   mustReset: boolean;
   permissions: string[];
   /** False until the effective permission set for the active tenant has loaded. */
@@ -52,6 +60,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [memberships, setMemberships] = useState<Membership[]>(() =>
     readJSON<Membership[]>(STORAGE.memberships, []),
   );
+  const [loginHandle, setLoginHandle] = useState<string | null>(
+    () => localStorage.getItem(STORAGE.login),
+  );
   const [mustReset, setMustReset] = useState<boolean>(
     () => readJSON<{ mustReset?: boolean }>(STORAGE.session, {}).mustReset ?? false,
   );
@@ -69,10 +80,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(STORAGE.refresh, session.refreshToken);
     localStorage.setItem(STORAGE.memberships, JSON.stringify(session.memberships));
     localStorage.setItem(STORAGE.session, JSON.stringify({ mustReset: session.mustReset }));
+    if (session.login) localStorage.setItem(STORAGE.login, session.login);
+    else localStorage.removeItem(STORAGE.login);
     // Permissions are per-tenant; clear until a tenant is chosen and they load.
     localStorage.removeItem(STORAGE.permissions);
     setToken(session.accessToken);
     setMemberships(session.memberships);
+    setLoginHandle(session.login ?? null);
     setMustReset(session.mustReset);
     setPermsState([]);
     setPermissionsReady(false);
@@ -96,11 +110,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    [STORAGE.token, STORAGE.refresh, STORAGE.memberships, STORAGE.session, STORAGE.permissions].forEach(
+    [STORAGE.token, STORAGE.refresh, STORAGE.memberships, STORAGE.session, STORAGE.permissions, STORAGE.login].forEach(
       (k) => localStorage.removeItem(k),
     );
     setToken(null);
     setMemberships([]);
+    setLoginHandle(null);
     setMustReset(false);
     setPermsState([]);
     setPermissionsReady(false);
@@ -115,6 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       token,
       memberships,
+      loginHandle,
       mustReset,
       permissions,
       permissionsReady,
@@ -126,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearMustReset,
       logout,
     }),
-    [token, memberships, mustReset, permissions, permissionsReady, hasPermission, login, setPermissions, resetPermissions, clearMustReset, logout],
+    [token, memberships, loginHandle, mustReset, permissions, permissionsReady, hasPermission, login, setPermissions, resetPermissions, clearMustReset, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -136,4 +152,11 @@ export function useAuth(): AuthState {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth must be used within <AuthProvider>');
   return ctx;
+}
+
+/** The membership for the active tenant — the single place to read the school name/slug. */
+export function useActiveMembership(): Membership | undefined {
+  const { memberships } = useAuth();
+  const { activeTenantId } = useTenant();
+  return memberships.find((m) => m.tenant_id === activeTenantId);
 }

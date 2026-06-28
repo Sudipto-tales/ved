@@ -12,7 +12,7 @@ export default function TeacherDetailPage() {
   if (!data) return null;
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div>
       <PageHeader title={data.name} subtitle={data.specialization || 'Teacher'} />
       <Link to="/teachers" className="subtle" style={{ fontSize: 13 }}>← Back to teachers</Link>
       <Card className="mt-16">

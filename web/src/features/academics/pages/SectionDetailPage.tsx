@@ -21,7 +21,7 @@ export default function SectionDetailPage() {
   const available = (students?.students ?? []).filter((s) => !enrolledIds.has(s.id));
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader title={section ? `${section.program_name} — ${section.stage_name} ${section.name}` : 'Section'} subtitle="The enrolled students (roster) for this section." />
       <Link to="/sections" className="subtle" style={{ fontSize: 13 }}>← Back to sections</Link>
 

@@ -36,7 +36,7 @@ export default function TeacherMarksPage() {
   const canSubmit = !!examId && !!teacherId && rows.length > 0 && !enter.isPending;
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader
         title="Enter marks"
         subtitle="Record exam marks for your students. Corrections are kept — a re-entry is a new row, latest counts."

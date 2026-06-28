@@ -43,10 +43,15 @@ func TestLoginWithGeneratedCredential(t *testing.T) {
 	assert.NotEmpty(t, res.AccessToken, "access token issued")
 	assert.NotEmpty(t, res.RefreshToken, "refresh token issued")
 	assert.True(t, res.MustReset, "a freshly onboarded user must reset on first login")
+	assert.Equal(t, sres.LoginIdentifier, res.Login, "login result echoes the user's handle (account chip)")
 	found := false
 	for _, m := range res.Memberships {
 		if m.TenantID == tenant.ID {
 			found = true
+			// The school name + slug ride the login payload so every persona can show
+			// them without the admin-gated profile call (docs/24, docs/25).
+			assert.Equal(t, "Test School", m.TenantName, "membership carries the school name")
+			assert.Equal(t, tenant.Slug, m.Slug, "membership carries the tenant slug")
 		}
 	}
 	assert.True(t, found, "login surfaces the user's membership in this tenant")

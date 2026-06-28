@@ -14,7 +14,7 @@ export default function ExamsPage() {
   const rows = data?.exams ?? [];
 
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <PageHeader title="Exams" subtitle="Assessment events for the current academic year — marks are entered against these." />
 
       <div className="grid-stats">

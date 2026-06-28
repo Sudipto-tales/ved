@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Badge, Button, Card, DataTable, EmptyState, Field, Icon, PageHeader, Select } from '@/shared/ui';
+import { SetupGate } from '@/features/dashboard/setup/SetupGate';
 import { useEnrollments, useSections, type Enrollment } from '../api/academicsApi';
 
 export default function EnrollmentPage() {
@@ -13,8 +14,10 @@ export default function EnrollmentPage() {
   const rows = data?.enrollments ?? [];
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader title="Enrollment" subtitle="Look up a section's roster. Manage enrollments from the section's detail page." />
+
+      <SetupGate step="students" />
 
       <Card className="mt-16">
         <Field label="Section">

@@ -61,7 +61,7 @@ export default function StaffRosterPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader title="Staff" subtitle="Non-teaching staff and authority. Onboarding creates the login, membership, and profile in one transaction." />
 
       <div className="grid-stats">

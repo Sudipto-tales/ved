@@ -10,7 +10,7 @@ export default function CurriculumPage() {
   const rows = data?.curriculum ?? [];
 
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <PageHeader title="Curriculum" subtitle="Which subjects a stage teaches — the bridge between stages and subjects." />
 
       <Card className="mt-16">

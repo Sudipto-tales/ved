@@ -7,4 +7,5 @@ export const STORAGE = {
   tenant: 'ved.tenant',
   memberships: 'ved.memberships',
   session: 'ved.session', // { userId, mustReset }
+  login: 'ved.login', // the signed-in user's handle (account chip)
 } as const;

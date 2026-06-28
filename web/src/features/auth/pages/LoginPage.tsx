@@ -32,6 +32,7 @@ export default function LoginPage() {
         accessToken: res.access_token,
         refreshToken: res.refresh_token,
         mustReset: res.must_reset_password,
+        login: res.login ?? identifier.trim(),
         memberships: res.memberships,
       });
       continueAfterAuth(res.memberships, res.must_reset_password);

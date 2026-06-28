@@ -23,7 +23,7 @@ export default function LeaveRequestPage() {
 
   if (submitted) {
     return (
-      <div style={{ maxWidth: 560 }}>
+      <div>
         <PageHeader title="Leave request" subtitle="Request leave on behalf of your child." />
         <Card className="mt-16">
           <EmptyState
@@ -50,7 +50,7 @@ export default function LeaveRequestPage() {
   }
 
   return (
-    <div style={{ maxWidth: 560 }}>
+    <div>
       <PageHeader
         title="Leave request"
         subtitle="Let the school know in advance when your child will be absent."

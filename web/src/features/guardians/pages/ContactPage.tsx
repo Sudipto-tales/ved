@@ -25,7 +25,7 @@ export default function ContactPage() {
   }
 
   return (
-    <div style={{ maxWidth: 560 }}>
+    <div>
       <PageHeader
         title="My contact details"
         subtitle="Keep your phone and email current so the school can reach you."

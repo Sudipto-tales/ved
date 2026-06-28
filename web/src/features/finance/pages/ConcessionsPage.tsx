@@ -33,7 +33,7 @@ export default function ConcessionsPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 900 }}>
+    <div>
       <PageHeader title="Concessions & Scholarships" subtitle="Discounts that reduce net dues. Posted as CONCESSION ledger entries so the audit trail stays intact." />
       <Badge tone="warning">Preview — backing tables land in a later milestone</Badge>
 

@@ -64,7 +64,7 @@ export default function AcademicYearPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div>
       <PageHeader
         title="Academic Year & Terms"
         subtitle="Define the academic calendar. Sections, exams, and fees anchor to the current year."

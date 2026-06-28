@@ -56,7 +56,7 @@ export default function RoomsPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div>
       <PageHeader
         title="Rooms"
         subtitle="Physical spaces for timetabling and exam seating. Preview only — changes are local."

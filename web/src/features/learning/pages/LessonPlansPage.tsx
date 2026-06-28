@@ -36,7 +36,7 @@ export default function LessonPlansPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader
         title="Lesson Plans"
         subtitle="Plan and sequence your teaching. A preview surface — plans are kept locally until the lesson-plan store ships."

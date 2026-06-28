@@ -49,7 +49,7 @@ export default function ExportsPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 860 }}>
+    <div>
       <PageHeader
         title="Exports"
         subtitle="Download institution data for reporting or migration. Preview only — the export pipeline is not yet wired."

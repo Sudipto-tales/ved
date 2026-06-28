@@ -8,7 +8,7 @@ export default function StudentAssignmentPage() {
   const { id = '' } = useParams();
 
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <PageHeader title="Assignment" subtitle="The brief, attached materials, and your submission status." />
       <Link to="/assignments" className="subtle" style={{ fontSize: 13 }}>← Back to my assignments</Link>
 

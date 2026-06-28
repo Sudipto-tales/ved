@@ -80,7 +80,7 @@ export default function HolidayCalendarPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div>
       <PageHeader
         title="Holiday Calendar"
         subtitle="Non-working days for the current academic year. Attendance and timetabling skip these dates."

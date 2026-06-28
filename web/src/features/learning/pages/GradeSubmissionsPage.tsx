@@ -52,7 +52,7 @@ export default function GradeSubmissionsPage() {
   const assignments = useAssignments(taId);
 
   return (
-    <div style={{ maxWidth: 920 }}>
+    <div>
       <PageHeader
         title="Grade Submissions"
         subtitle="Grade student work. A graded assignment with max marks flows into the append-only marks ledger automatically."

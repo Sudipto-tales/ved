@@ -53,7 +53,7 @@ export default function CashClosePage() {
   ];
 
   return (
-    <div style={{ maxWidth: 860 }}>
+    <div>
       <PageHeader title="Daily Cash Close" subtitle="End-of-day reconciliation. Count the drawer against today's recorded receipts, then close the session." />
 
       <div className="grid-stats mt-16">

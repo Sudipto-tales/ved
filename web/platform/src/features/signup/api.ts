@@ -22,6 +22,25 @@ export interface RegisterInput {
   admin_email: string;
   admin_phone?: string;
   plan_id: string;
+  business_reg?: string;
+  gst?: string;
+  // Answers to superadmin-defined custom fields, keyed by field_key.
+  extra?: Record<string, unknown>;
+}
+
+// RegFormField mirrors the control-plane registration_field_config row (the dynamic form
+// template). The public projection only returns visible fields.
+export interface RegFormField {
+  field_key: string;
+  kind: 'BUILTIN' | 'CUSTOM';
+  field_type: 'TEXT' | 'NUMBER' | 'DATE' | 'EMAIL' | 'PHONE' | 'DROPDOWN' | 'FILE';
+  label: string;
+  help_text: string;
+  visible: boolean;
+  required: boolean;
+  locked: boolean;
+  ordinal: number;
+  options: { label: string; value: string }[];
 }
 
 export interface Registration {
@@ -49,6 +68,13 @@ export function usePlans() {
   return useQuery({
     queryKey: ['signup', 'plans'],
     queryFn: () => api.get<{ plans: Plan[] }>('/api/v1/plans'),
+  });
+}
+
+export function useRegistrationForm() {
+  return useQuery({
+    queryKey: ['signup', 'registration-form'],
+    queryFn: () => api.get<{ fields: RegFormField[] }>('/api/v1/registration-form'),
   });
 }
 

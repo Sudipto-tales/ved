@@ -9,7 +9,7 @@ export default function ExamDetailPage() {
   const exam = data?.exams.find((e) => e.id === id);
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div>
       <PageHeader title={exam ? exam.name : 'Exam'} subtitle="An assessment event. Enter marks per enrolled student and subject." />
       <Link to="/exams" className="subtle" style={{ fontSize: 13 }}>← Back to exams</Link>
 

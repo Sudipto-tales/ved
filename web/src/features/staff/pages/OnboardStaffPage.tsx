@@ -90,7 +90,7 @@ export default function OnboardStaffPage() {
 
   if (result) {
     return (
-      <div style={{ maxWidth: 560 }}>
+      <div>
         <PageHeader title="Staff onboarded" subtitle="Hand these credentials over. The password is shown once and must be reset on first login." />
         <Card className="mt-16">
           <div className="row"><span className="muted">Login</span><code>{result.login_identifier}</code></div>
@@ -107,7 +107,7 @@ export default function OnboardStaffPage() {
   }
 
   return (
-    <div style={{ maxWidth: 560 }}>
+    <div>
       <PageHeader title="Onboard staff" subtitle="Creates the login, membership, and staff profile in one transaction." />
       {formError && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{formError}</p>}
       {onboard.error && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{String(onboard.error)}</p>}

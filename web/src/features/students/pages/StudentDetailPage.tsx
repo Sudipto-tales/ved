@@ -20,7 +20,7 @@ export default function StudentDetailPage() {
   const pct = total > 0 ? Math.round((present / total) * 100) : null;
 
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <PageHeader title={data.name} subtitle={`Admission #${data.admission_no}`} />
       <Link to="/students" className="subtle" style={{ fontSize: 13 }}>← Back to roster</Link>
 

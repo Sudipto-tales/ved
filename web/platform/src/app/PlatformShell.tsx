@@ -12,6 +12,7 @@ import { PlatformCommandPalette } from './search/PlatformCommandPalette';
 const ICONS: Record<string, IconName> = {
   dashboard: 'grid',
   registrations: 'user-plus',
+  'registration-form': 'note',
   'payment-proofs': 'wallet',
   tenants: 'building',
   subscriptions: 'layers',
@@ -28,7 +29,7 @@ const iconFor = (path: string): IconName => ICONS[path.split('/')[0]] ?? 'grid';
 // each lists the page paths it owns. Pages not present/nav are silently skipped.
 const SECTIONS: { label?: string; paths: string[] }[] = [
   { paths: ['dashboard'] },
-  { label: 'TENANTS', paths: ['registrations', 'tenants', 'payment-proofs'] },
+  { label: 'TENANTS', paths: ['registrations', 'registration-form', 'tenants', 'payment-proofs'] },
   { label: 'BILLING', paths: ['subscriptions', 'licenses'] },
   { label: 'SYSTEM', paths: ['releases', 'settings', 'support'] },
 ];

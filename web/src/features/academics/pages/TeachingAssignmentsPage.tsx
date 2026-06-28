@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button, Card, DataTable, EmptyState, Field, Icon, PageHeader, Select, StatCard } from '@/shared/ui';
 import { Can } from '@/shared/authz/Can';
+import { SetupGate } from '@/features/dashboard/setup/SetupGate';
 import {
   useCreateTeachingAssignment,
   useSections,
@@ -32,8 +33,10 @@ export default function TeachingAssignmentsPage() {
   const rows = data?.teaching_assignments ?? [];
 
   return (
-    <div style={{ maxWidth: 960 }}>
+    <div>
       <PageHeader title="Teaching assignments" subtitle="Who teaches what, where — a teacher bound to a section + subject." />
+
+      <SetupGate step="teaching-assignments" />
 
       <div className="grid-stats">
         <StatCard label="Assignments" value={rows.length} accent />

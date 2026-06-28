@@ -19,7 +19,7 @@ function Tile({ to, icon, title, desc }: { to: string; icon: 'note' | 'graduatio
 
 export default function TeacherDashboardPage() {
   return (
-    <div style={{ maxWidth: 920 }}>
+    <div>
       <PageHeader title="Dashboard" subtitle="Your teaching day at a glance." />
 
       <HeroBanner

@@ -15,7 +15,7 @@ const QUICK_LINKS: { to: string; label: string; icon: IconName }[] = [
 
 export default function StudentDashboardPage() {
   return (
-    <div style={{ maxWidth: 920 }}>
+    <div>
       <HeroBanner
         tag="STUDENT PORTAL"
         title="Welcome back"

@@ -30,7 +30,7 @@ export default function ProfilePage() {
 
   if (profile.isLoading) {
     return (
-      <div style={{ maxWidth: 720 }}>
+      <div>
         <PageHeader title="School / College Profile" />
         <Card className="mt-16"><Spinner /></Card>
       </div>
@@ -38,7 +38,7 @@ export default function ProfilePage() {
   }
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div>
       <PageHeader
         title="School / College Profile & Branding"
         subtitle="Identity and contact details for this institution. The slug is permanent — it forms every login handle."

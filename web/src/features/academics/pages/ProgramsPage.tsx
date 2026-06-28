@@ -15,7 +15,7 @@ export default function ProgramsPage() {
   const rows = data?.programs ?? [];
 
   return (
-    <div style={{ maxWidth: 920 }}>
+    <div>
       <PageHeader title="Programs" subtitle="The top of the academic structure: a course of study (program → stage → section)." />
 
       <div className="grid-stats">

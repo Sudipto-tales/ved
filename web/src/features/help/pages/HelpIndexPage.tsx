@@ -15,7 +15,7 @@ const CATEGORY_ORDER: HelpTopic['category'][] = [
 
 export default function HelpIndexPage() {
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div>
       <PageHeader
         title="Help & guidance"
         subtitle="Short, practical guides for everyday tasks. Tip: the “?” next to any page title jumps straight to the right one."

@@ -39,7 +39,7 @@ export default function MarksPage() {
   const ready = examId && sectionId && subjectId;
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader title="Marks entry" subtitle="Append-only — a re-grade adds new rows; the latest by clock is effective. Pick exam, section and subject." />
 
       <Card className="mt-16">

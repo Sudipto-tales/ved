@@ -66,7 +66,7 @@ export default function DashboardsPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 1100 }}>
+    <div>
       <PageHeader
         title="Dashboard"
         subtitle="A snapshot of the institution. Illustrative figures — live aggregation lands with the reports slice."

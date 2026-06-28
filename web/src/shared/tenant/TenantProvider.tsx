@@ -5,6 +5,7 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { STORAGE } from '@/shared/lib/storage';
 import { hostTenant } from '@/shared/tenant/host';
+import { useAuth } from '@/shared/auth/AuthProvider';
 
 interface TenantState {
   activeTenantId: string | null;
@@ -20,18 +21,34 @@ const TenantContext = createContext<TenantState | null>(null);
 
 export function TenantProvider({ children }: { children: ReactNode }) {
   const host = hostTenant(); // stable for the page's lifetime
-  const [activeTenantId, setActiveTenantId] = useState<string | null>(
+  const { memberships } = useAuth();
+  // Bare-host (localhost) picker selection — irrelevant on a subdomain.
+  const [picked, setPicked] = useState<string | null>(
     () => localStorage.getItem(STORAGE.tenant),
   );
 
+  // On a {slug}.ved.* subdomain the tenant is implied by the host, so there is no picker.
+  // Derive the active tenant_id from the membership whose slug matches the subdomain (or
+  // the sole membership when slug isn't carried on an older session). Without this,
+  // activeTenantId stays null on subdomains and everything keyed on it silently breaks:
+  // permission sync (useSyncPermissions gates on activeTenantId) never loads, so every
+  // <Can>/<PermissionGuard> fails closed and admin actions (e.g. "Onboard student")
+  // vanish; persona + sidebar brand also fall back wrongly (docs/25).
+  const subdomainTenantId = host
+    ? (memberships.find((m) => m.slug === host.slug)?.tenant_id ??
+       (memberships.length === 1 ? memberships[0].tenant_id : null))
+    : null;
+
+  const activeTenantId = host ? subdomainTenantId : picked;
+
   const setTenant = useCallback((id: string) => {
     localStorage.setItem(STORAGE.tenant, id);
-    setActiveTenantId(id);
+    setPicked(id);
   }, []);
 
   const clearTenant = useCallback(() => {
     localStorage.removeItem(STORAGE.tenant);
-    setActiveTenantId(null);
+    setPicked(null);
   }, []);
 
   const value = useMemo<TenantState>(

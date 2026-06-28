@@ -17,7 +17,7 @@ export default function SubjectsPage() {
   const rows = data?.subjects ?? [];
 
   return (
-    <div style={{ maxWidth: 920 }}>
+    <div>
       <PageHeader title="Subjects" subtitle="The taught-subject catalogue, mapped to stages via curriculum." />
 
       <div className="grid-stats">

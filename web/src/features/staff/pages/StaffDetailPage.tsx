@@ -12,7 +12,7 @@ export default function StaffDetailPage() {
   if (!data) return null;
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div>
       <PageHeader title={data.name} subtitle={data.designation || 'Staff'} />
       <Link to="/staff" className="subtle" style={{ fontSize: 13 }}>← Back to staff</Link>
       <Card className="mt-16">

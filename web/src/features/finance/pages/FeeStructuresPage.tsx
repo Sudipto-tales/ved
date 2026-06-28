@@ -34,7 +34,7 @@ export default function FeeStructuresPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 920 }}>
+    <div>
       <PageHeader title="Fee Structures" subtitle="Named bundles of fee heads applied to a class, section, or year. Define once, generate invoices in bulk." />
       <Badge tone="warning">Preview — backing tables land in a later milestone</Badge>
 

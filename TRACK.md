@@ -5,7 +5,118 @@ The single place that records **how far the build has progressed** against the p
 
 **Legend:** ✅ done · 🟡 scaffolded / partial · ⬜ not started
 
-> **YOU ARE HERE:** **M11 (Login-As · Magic-Link · Plan-Versioning · KYC · AutoPay) — backend
+> **YOU ARE HERE:** **BUGFIX — subdomain tenant context never set, so admins on
+> `{slug}.ved.test` could not create students (or do any permission-gated action).** Root
+> cause (frontend, found by driving the whole platform→school flow over HTTP): on a
+> `{slug}.ved.*` subdomain the post-login flow (`useAuthFlow`) navigates to `/` but never
+> calls `setTenant`, and `TenantProvider.activeTenantId` was sourced ONLY from the
+> localhost picker's `localStorage`. So on every real school subdomain `activeTenantId`
+> stayed `null` → `useSyncPermissions` (gated on `activeTenantId`) never fetched
+> `/me/permissions` → permissions stayed `[]` → every `<Can>`/`PermissionGuard` failed
+> closed → the **"Onboard student"** button (and all admin actions) vanished, plus persona
+> + sidebar-brand fell back wrongly. The localhost/dev path worked only because
+> `tenantSlug` is null there, so it fell through to `setTenant(memberships[0].tenant_id)`.
+> **Fix:** `TenantProvider` now derives `activeTenantId` on a subdomain from the membership
+> whose `slug` matches the host (or the sole membership for older sessions without the slug
+> field), so the bare-host picker path is unchanged but the subdomain path resolves the
+> tenant id — fixing permission-sync, persona routing, and the brand in one place; covers
+> fresh login, refresh, and pre-existing sessions (memberships are read synchronously from
+> localStorage, and `AuthProvider` wraps `TenantProvider` so `useAuth()` is available).
+> **Verified:** the ENTIRE backend flow is healthy end-to-end (live HTTP on the running
+> stack) — platform login → register → payment-proof → approve+provision → new-admin login
+> (via nginx + `X-Tenant-Slug`) → onboarding-template/dropdowns/roles all seeded →
+> **`POST /students/onboard` returns 201** (direct, nginx, and slug paths) → student in
+> roster; `/me/permissions` for the provisioned admin includes `student.onboard`. So the
+> bug was purely the FE tenant-context seam. `tsc -b` + `vite build` clean; fix rebuilt
+> into the running `web` container and confirmed served. _Also surfaced (environment, not
+> code): `*.ved.test` has no wildcard DNS here — `/etc/hosts` lists only a few slugs and
+> dnsmasq (`deploy/dnsmasq/ved-test.conf`, docs/25 §6) isn't active, so a freshly-registered
+> school's subdomain won't resolve in the browser until added. Carried-forward: not yet
+> browser-smoked (the sandbox can't hold a headless-Chrome debug session); recommend a
+> click-through on a resolvable school subdomain to confirm the Onboard button now appears._
+>
+> **(prev) Post-login identity in the tenant shell — school name + welcome +
+> account chip (backend + frontend), live-verified.** Two fixes shipped together. (1)
+> **Removed the dead `{slug}-admin` subdomain structure** — the tenant admin uses the SAME
+> `{slug}.ved.test` door as every other role (the login identifier, not the address, picks
+> the experience; docs/24, docs/25). Dropped the `admin` arg from `platformApi.tenantUrl`,
+> deleted the redundant "Open admin" button on the platform Tenant detail page, and fixed
+> the misleading nginx comments. (2) **The shell now shows which school you're in and who
+> you are.** Previously the sidebar was a hardcoded "VED" + a truncated tenant UUID, the
+> dashboard said a generic "Welcome back", and the topbar had no profile. Sourced from the
+> **login payload** (so EVERY persona gets it with no extra, admin-gated call): new
+> migration **`00017_membership_tenant_name`** widens the `auth_memberships(uuid)` SECURITY
+> DEFINER fn to also return `tenant_name`+`tenant_slug` via a LEFT JOIN on `tenant_profile`;
+> identity's `MembershipDTO` gains `tenant_name`/`slug`, `LoginResult` gains the user's
+> `login` handle, and `/me/memberships` re-resolves from the DB so a refresh carries the
+> same fields. OpenAPI spec updated + TS client regenerated (the fence). FE: `AuthProvider`
+> carries the handle + a new `useActiveMembership()` helper; the **sidebar brand** shows the
+> school name + slug, the **dashboard hero** reads "Welcome to {School} 👋", and a **topbar
+> account chip** (avatar + handle + role label + sign-out menu, reusing the `.menu` pattern)
+> fills the empty topbar. Added `user`/`chevron-down`/`log-out` thin-line icons.
+> **Verified:** `go build`/`vet`/`gofmt` clean (identity); both web apps `tsc -b` + `vite
+> build` + `build:platform` clean (EXIT 0); identity integration test extended + green;
+> **live HTTP smoke on the rebuilt node** — `POST /auth/login` (admin@ved.local) returns
+> `login`="admin@ved.local", `memberships[0].tenant_name`="VED Demo School", `slug`="ved";
+> `/me/memberships` carries the same; migration #17 applied. _Carried-forward: impersonation
+> / magic-link logins have no typed handle so the chip falls back to the role label only;
+> a teacher/student live login wasn't re-smoked but the DB fn returns the name for every
+> persona._
+>
+> **(prev) Guided school-setup journey + tenant sidebar redesign (frontend) —
+> complete, typechecks + builds clean.** New **`docs/26-school-setup-journey.md`** specs the
+> dependency-ordered setup chain (academic year → programs → sections/subjects → teachers →
+> teaching assignments → students → fees) with the rule "you can't reference a thing that
+> doesn't exist yet" (the worked example: create a teacher before assigning classes). FE: a
+> single-source **`useSetupProgress`** hook derives each step's done/blocked status from the
+> existing per-tenant list endpoints; a **`SetupChecklist`** on the admin dashboard (gated
+> `tenant.settings`, hides when complete) shows ordered steps with progress %, NEXT/locked
+> states and CTAs; a **`SetupGate`** soft-warning banner on the dependent pages (Teaching
+> assignments → needs teachers/sections/subjects; Sections → programs; Enrollment → sections)
+> names the missing prerequisite and links to it without hard-blocking. The **tenant sidebar**
+> is regrouped from one flat "ADMIN" list into functional, journey-ordered sections (Setup ·
+> People · Academics · Finance · Communication · Access & Roles · Reports · Support) derived
+> from each page's path in `AppShell`; the teacher/student/guardian portals keep their focused
+> single-group nav. **Verified:** tenant `tsc -b` + `vite build` clean (1056 modules); platform
+> unaffected. _Not yet browser-smoked. Carried-forward: finance SetupGate (Invoices/Collection
+> needs a fee-structure presence check beyond the fee-heads count)._
+>
+> **(prev) Dynamic School-Registration Form (control plane) — backend + frontend
+> complete & live-verified.** The platform superadmin can now curate the public `/signup`
+> form without a code change — the control-plane sibling of M10's dynamic onboarding template
+> (docs/06, docs/24). New cp migration **`cpmigrations/00011_registration_form`** adds a SINGLE
+> GLOBAL **`registration_field_config`** table (no tenant_id/RLS/sync — control-plane
+> convention) + an **`extra_fields` JSONB** on `school_registration`, and seeds the built-ins
+> (`school_name/slug/admin_name/admin_email/plan_id` LOCKED — relabel/reorder only, never
+> hide/un-require; `admin_phone` toggleable; `business_reg/gst` hidden-by-default toggleable
+> built-ins that map to the existing KYC columns). Backend **`registration_form.go`**:
+> `GetRegistrationForm(includeHidden)` + `SaveRegistrationForm` (golden-rule ANALOG — field
+> upserts + **ONE `cp_audit_log`** row, **NO `cp_outbox`** since the template is
+> control-plane-only and never reaches a node; immutable kind/field_type/locked taken from the
+> stored row; custom keys validated as slugs; absent customs hard-deleted). `Register` now loads
+> the live template, **rejects** missing visible+required fields (built-in OR custom) with their
+> labels, and persists recognised **visible** custom answers into `extra_fields`. Handlers:
+> public `GET /api/v1/registration-form` (drives signup) + platform `GET`/`PUT
+> /api/v1/platform/registration-form` (gated `platform.registration.review`). FE (platform SPA,
+> manual client): the signup form **renders from the template** (built-ins keep bespoke widgets;
+> custom fields render by type incl. dropdown; required-validated; posts `extra{}`), a new
+> **Registration Form** editor page under the TENANTS sidebar section (toggle/relabel/reorder
+> built-ins, add/remove custom fields with a dropdown-options editor, locked rows disabled), and
+> the review page shows submitted custom answers. **Verified:** `go build`/`go vet
+> -tags=integration`/`gofmt` clean; platform `tsc -b` + `vite build:platform` clean; **3 new
+> integration tests green** (save golden-rule: one cp_audit_log + zero cp_outbox + locked/
+> dropdown/slug guards; Register enforces required custom field + persists visible / drops hidden
+> answers; public projection visibility + ordering); **live HTTP smoke** on the control-plane
+> binary — public GET built-ins, platform login, unauth PUT → 401, PUT add required custom
+> dropdown → 204, register WITHOUT it → 400 "required field(s): Affiliation board", WITH it →
+> 201 + `extra_fields={"board":"CBSE"}` persisted. _Carried-forward: custom **FILE** fields
+> render as a link/text input for now (MinIO upload path — the payment-proof pattern — is a fast
+> follow-up); endpoints use the manual platform API client (OpenAPI promotion is a doc
+> follow-up, consistent with the M9–M11 slices). Pre-existing `TestMagicLinkActivation` failure
+> (`outbox_op_check` in identity.Activate) is unrelated to this slice — reproduces on the clean
+> branch._
+>
+> **(prev) M11 (Login-As · Magic-Link · Plan-Versioning · KYC · AutoPay) — backend
 > + frontend complete; live DB verification PENDING.** The five deferred super-admin/platform
 > features (docs/promts.md) are built as five vertical slices. **Slice A — KYC/Risk/Source**
 > (`cp/00006`): `school_registration` gains kyc_status/business_reg/gst/notes + risk_score

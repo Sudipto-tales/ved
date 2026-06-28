@@ -100,7 +100,7 @@ export default function OnboardingFormsPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 760 }}>
+    <div>
       <PageHeader
         title="Onboarding Forms"
         subtitle="Choose which fields each onboarding form collects"

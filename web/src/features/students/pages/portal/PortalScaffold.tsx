@@ -39,7 +39,7 @@ export function PortalPage({
   children?: ReactNode;
 }) {
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <PageHeader title={title} subtitle={subtitle} />
       {children}
       <ComingSoonCard icon={icon} title={comingTitle} desc={comingDesc} />

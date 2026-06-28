@@ -88,7 +88,7 @@ export default function GuardiansPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 920 }}>
+    <div>
       <PageHeader
         title="Guardians"
         subtitle="Guardian contact records for this school. Promote a guardian to give them portal access — the login is created with the Guardian role in one transaction."

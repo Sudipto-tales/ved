@@ -79,9 +79,6 @@ export default function TenantDetailPage() {
             <Button variant="secondary" onClick={() => window.open(tenantUrl(tenant.slug), '_blank')}>
               Visit site
             </Button>
-            <Button variant="secondary" onClick={() => window.open(tenantUrl(tenant.slug, true), '_blank')}>
-              Open admin
-            </Button>
             <Button variant="secondary" onClick={() => navigate('/licenses')}>
               Manage License
             </Button>
@@ -100,7 +97,12 @@ export default function TenantDetailPage() {
               <span className="subtle" style={{ fontSize: 12 }}>/{tenant.slug}</span>
               <Badge tone={statusTone(tenant.status)}>{tenant.status}</Badge>
             </div>
-            <div className="row mt-16"><span className="muted">Tenant ID</span><code>{tenant.id}</code></div>
+            <div className="row mt-16"><span className="muted">Admin</span><span>{tenant.admin_name ?? '—'}</span></div>
+            <div className="row">
+              <span className="muted">Email</span>
+              {tenant.admin_email ? <a href={`mailto:${tenant.admin_email}`}>{tenant.admin_email}</a> : <span>—</span>}
+            </div>
+            <div className="row"><span className="muted">Tenant ID</span><code>{tenant.id}</code></div>
             <div className="row"><span className="muted">Plan</span><span>{tenant.plan ?? '—'}</span></div>
             <div className="row">
               <span className="muted">License</span>

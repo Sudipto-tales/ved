@@ -10,7 +10,7 @@ export default function GuardianDashboard() {
   const children = data?.children ?? [];
 
   return (
-    <div style={{ maxWidth: 720 }}>
+    <div>
       <PageHeader title="My children" subtitle="Everything here is scoped to your own children — attendance, marks, and fees as the school records them." />
       <Card className="mt-16">
         {isLoading && <Spinner />}

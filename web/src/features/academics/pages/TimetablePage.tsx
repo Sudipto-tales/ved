@@ -8,7 +8,7 @@ const PERIODS = ['08:00', '09:00', '10:00', '11:00', '12:00', '14:00', '15:00'];
 
 export default function TimetablePage() {
   return (
-    <div style={{ maxWidth: 1040 }}>
+    <div>
       <PageHeader title="Timetable" subtitle="Weekly schedule of section × subject × teacher slots." />
 
       <div className="row mt-16">

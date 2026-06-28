@@ -38,7 +38,7 @@ export default function TeacherAttendancePage() {
   const canSubmit = !!sectionId && !!teacherId && !!date && rows.length > 0 && !mark.isPending;
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader
         title="Mark attendance"
         subtitle="Record attendance for a section on a date. Corrections are kept — a re-mark is a new entry, latest counts."

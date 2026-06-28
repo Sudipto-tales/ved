@@ -71,7 +71,7 @@ export default function MakerCheckerPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 880 }}>
+    <div>
       <PageHeader
         title="Maker-Checker Config"
         subtitle="Require a second approver before sensitive operations commit. Preview only — the approval engine is not yet wired."

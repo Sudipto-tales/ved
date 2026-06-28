@@ -110,6 +110,8 @@ schemas:
       membership_id: { type: string, format: uuid }
       tenant_id: { type: string, format: uuid }
       user_type: { type: string }
+      tenant_name: { type: string, description: "The school/college display name (for the sidebar + welcome)." }
+      slug: { type: string, description: "The tenant slug (login domain)." }
 
   LoginResult:
     type: object
@@ -118,6 +120,7 @@ schemas:
       access_token: { type: string }
       refresh_token: { type: string }
       must_reset_password: { type: boolean }
+      login: { type: string, description: "The signed-in user's login handle (account chip)." }
       memberships:
         type: array
         items: { $ref: '#/schemas/MembershipDTO' }

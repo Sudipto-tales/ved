@@ -33,7 +33,7 @@ export default function FeeSchedulesPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 900 }}>
+    <div>
       <PageHeader title="Fee Schedules" subtitle="Installment plans and due-date calendars that auto-issue invoices on a cadence." />
       <Badge tone="warning">Preview — backing tables land in a later milestone</Badge>
 

@@ -35,7 +35,7 @@ export default function SubmitWorkPage() {
     .map((r) => ({ storage_key: r.storage_key.trim(), filename: r.filename.trim(), size: Number(r.size) || 0 }));
 
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <PageHeader
         title="Submit Work"
         subtitle="Attach your files and submit. A resubmission is kept as a new version — your latest counts. Late submissions are flagged automatically."

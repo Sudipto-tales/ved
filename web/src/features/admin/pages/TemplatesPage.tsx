@@ -67,7 +67,7 @@ export default function TemplatesPage() {
   ];
 
   return (
-    <div style={{ maxWidth: 820 }}>
+    <div>
       <PageHeader
         title="Document & Number Templates"
         subtitle="Reusable document layouts and gapless number sequences. Preview only — editing is not yet wired."

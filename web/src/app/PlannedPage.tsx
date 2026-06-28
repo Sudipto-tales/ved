@@ -9,7 +9,7 @@ const TONE = { T1: 'primary', T2: 'neutral', T3: 'warning' } as const;
 
 export function PlannedPage({ page }: { page: PageDef }) {
   return (
-    <div style={{ maxWidth: 680 }}>
+    <div>
       <PageHeader title={page.title} subtitle={`${page.persona} · planned`} help={topicForPath(page.path)} />
       <div className="empty">
         <div className="flex gap-8">
